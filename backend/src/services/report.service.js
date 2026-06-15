@@ -1,6 +1,7 @@
 import { query, withTransaction } from '../config/db.js';
 import { ApiError } from '../utils/ApiError.js';
 import { notifyStatusChange } from './notification.service.js';
+import { processFiles, insertPhotoRows } from './photo.service.js';
 
 // Allowed status transitions per the spec lifecycle:
 // new → accepted → assigned → in_progress → resolved → closed (with reopen + early-close paths).
@@ -59,26 +60,54 @@ export async function getById(tenantId, id) {
   return { ...rows[0], photos };
 }
 
-export async function create(tenantId, reporterId, body) {
-  // Enforce verified email before allowing report creation.
+// Automatic routing: the default responsible entity configured for a category (or null).
+export async function routeForCategory(tenantId, categoryId) {
+  const { rows } = await query(
+    `SELECT cr.responsible_entity_id AS id
+     FROM category_routes cr JOIN categories c ON c.id = cr.category_id
+     WHERE cr.category_id = $1 AND c.tenant_id = $2`,
+    [categoryId, tenantId]);
+  return rows[0]?.id ?? null;
+}
+
+// Create a report with its mandatory photos (1–3, compressed) in one atomic step.
+// The responsible entity is auto-resolved from the category's routing configuration.
+export async function createReport(tenantId, reporterId, body, files) {
   const { rows: u } = await query('SELECT is_email_verified FROM users WHERE id = $1', [reporterId]);
   if (!u[0]?.is_email_verified) throw new ApiError(403, 'EMAIL_NOT_VERIFIED', 'Verify your email first');
+  if (!files?.length) throw ApiError.badRequest('At least one photo is required');
 
-  // Ensure the category belongs to this tenant.
-  const { rows: cat } = await query('SELECT id FROM categories WHERE id = $1 AND tenant_id = $2',
+  const { rows: cat } = await query(
+    'SELECT id FROM categories WHERE id = $1 AND tenant_id = $2 AND is_active = TRUE',
     [body.categoryId, tenantId]);
   if (!cat[0]) throw ApiError.badRequest('Unknown category for this tenant');
+  if (body.subcategoryId) {
+    const { rows: sub } = await query(
+      'SELECT id FROM subcategories WHERE id = $1 AND category_id = $2',
+      [body.subcategoryId, body.categoryId]);
+    if (!sub[0]) throw ApiError.badRequest('Subcategory does not belong to the category');
+  }
 
-  const { rows } = await query(
-    `INSERT INTO reports
-       (tenant_id, reporter_id, category_id, subcategory_id, title, description,
-        latitude, longitude, address, priority)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-     RETURNING id, status, upvote_count AS "upvoteCount", created_at AS "createdAt"`,
-    [tenantId, reporterId, body.categoryId, body.subcategoryId ?? null, body.title,
-      body.description ?? null, body.latitude, body.longitude, body.address ?? null, body.priority],
-  );
-  return rows[0];
+  const assignedEntityId = await routeForCategory(tenantId, body.categoryId);
+  // Compress/write files before the transaction; orphaned files on rollback are harmless.
+  const metas = await processFiles(tenantId, files);
+
+  return withTransaction(async (c) => {
+    const { rows } = await c.query(
+      `INSERT INTO reports
+         (tenant_id, reporter_id, category_id, subcategory_id, title, description,
+          latitude, longitude, address, priority, assigned_entity_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       RETURNING id, status, priority, assigned_entity_id AS "assignedEntityId",
+                 upvote_count AS "upvoteCount", created_at AS "createdAt"`,
+      [tenantId, reporterId, body.categoryId, body.subcategoryId ?? null, body.title,
+        body.description ?? null, body.latitude, body.longitude, body.address ?? null,
+        body.priority, assignedEntityId],
+    );
+    const report = rows[0];
+    const photos = await insertPhotoRows(c, report.id, metas, { existing: 0 });
+    return { ...report, photos };
+  });
 }
 
 export async function history(tenantId, reportId) {

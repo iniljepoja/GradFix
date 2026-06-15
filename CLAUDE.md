@@ -67,6 +67,11 @@ Controllers throw `ApiError` (`utils/ApiError.js`); the error handler converts t
   stored. Unverified users can log in but are blocked from creating reports.
 
 ### Reports & status lifecycle
+- **Creation** (`POST /reports`) is `multipart/form-data` and **requires 1–3 photos** — enforced in
+  `report.service.createReport`, which compresses photos, inserts the report + photo rows atomically,
+  and **auto-routes**: `assigned_entity_id` is resolved from the category's `category_routes` entry.
+- Admin assignment (`PATCH /admin/reports/:id/assign`) accepts an explicit `entityId` or, if omitted,
+  falls back to the same category route.
 - Status flow: `new → accepted → assigned → in_progress → resolved → closed` (with reopen
   `resolved → in_progress` and early-close paths). Allowed transitions are enforced by
   `STATUS_TRANSITIONS` / `assertTransition` in `services/report.service.js`.

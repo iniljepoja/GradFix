@@ -62,23 +62,29 @@ router.get('/:id/history', async (req, res, next) => {
   catch (err) { next(err); }
 });
 
-// POST /api/v1/reports — create (authenticated; service enforces email verification).
-router.post('/', authenticate,
+// POST /api/v1/reports — create a report (multipart/form-data).
+// Citizen flow: mandatory photo (1–3, compressed) + GPS + category/subcategory + description +
+// priority. `photoUpload` parses the text fields and the `photos` files; the service enforces
+// email verification, the photo requirement, and automatic category→entity routing.
+const emptyToUndef = (v) => (v === '' ? undefined : v);
+router.post('/', authenticate, photoUpload,
   validate({
     body: z.object({
       title: z.string().min(3),
-      description: z.string().optional(),
+      description: z.preprocess(emptyToUndef, z.string().optional()),
       categoryId: z.string().uuid(),
-      subcategoryId: z.string().uuid().optional(),
-      latitude: z.number().min(-90).max(90),
-      longitude: z.number().min(-180).max(180),
-      address: z.string().optional(),
-      priority: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
+      subcategoryId: z.preprocess(emptyToUndef, z.string().uuid().optional()),
+      latitude: z.coerce.number().min(-90).max(90),
+      longitude: z.coerce.number().min(-180).max(180),
+      address: z.preprocess(emptyToUndef, z.string().optional()),
+      priority: z.preprocess(emptyToUndef, z.enum(['low', 'medium', 'high', 'critical']).default('medium')),
     }),
   }),
   async (req, res, next) => {
-    try { res.status(201).json({ data: await reports.create(req.tenant.id, req.user.id, req.body) }); }
-    catch (err) { next(err); }
+    try {
+      const data = await reports.createReport(req.tenant.id, req.user.id, req.body, req.files);
+      res.status(201).json({ data });
+    } catch (err) { next(err); }
   });
 
 // Staff status management lives in the admin router (/api/v1/admin/reports/:id/status).

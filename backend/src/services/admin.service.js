@@ -42,7 +42,8 @@ export async function listReports(tenantId, f) {
 async function loadReport(tenantId, reportId, client = null) {
   const runner = client ?? { query };
   const { rows } = await runner.query(
-    'SELECT id, status, assigned_entity_id, duplicate_of_id FROM reports WHERE id = $1 AND tenant_id = $2',
+    `SELECT id, status, category_id, assigned_entity_id, duplicate_of_id
+     FROM reports WHERE id = $1 AND tenant_id = $2`,
     [reportId, tenantId]);
   if (!rows[0]) throw ApiError.notFound('Report not found');
   return rows[0];
@@ -58,20 +59,30 @@ export async function updatePriority(tenantId, reportId, priority) {
 
 // Assign a report to a responsible entity. The report must be accepted first; an accepted report
 // transitions to "assigned" (with status history); an already-assigned/in-progress report is just
-// re-pointed at a new entity.
+// re-pointed at a new entity. If entityId is omitted, the category's automatic route is used.
 export async function assignEntity(tenantId, reportId, entityId, userId) {
-  const { rows: ent } = await query(
-    'SELECT id FROM responsible_entities WHERE id = $1 AND tenant_id = $2 AND is_active = TRUE',
-    [entityId, tenantId]);
-  if (!ent[0]) throw ApiError.badRequest('Unknown responsible entity for this tenant');
-
   return withTransaction(async (c) => {
     const report = await loadReport(tenantId, reportId, c);
     if (report.status === 'new') throw ApiError.badRequest('Accept the report before assigning it');
     if (['resolved', 'closed'].includes(report.status)) {
       throw ApiError.badRequest(`Cannot assign a ${report.status} report`);
     }
-    await c.query('UPDATE reports SET assigned_entity_id = $1 WHERE id = $2', [entityId, reportId]);
+
+    let target = entityId;
+    if (!target) {
+      const { rows } = await c.query(
+        'SELECT responsible_entity_id AS id FROM category_routes WHERE category_id = $1',
+        [report.category_id]);
+      target = rows[0]?.id;
+      if (!target) throw ApiError.badRequest('No entity provided and no route configured for the category');
+    }
+
+    const { rows: ent } = await c.query(
+      'SELECT id FROM responsible_entities WHERE id = $1 AND tenant_id = $2 AND is_active = TRUE',
+      [target, tenantId]);
+    if (!ent[0]) throw ApiError.badRequest('Unknown responsible entity for this tenant');
+
+    await c.query('UPDATE reports SET assigned_entity_id = $1 WHERE id = $2', [target, reportId]);
     if (report.status === 'accepted') {
       await c.query('UPDATE reports SET status = $1 WHERE id = $2', ['assigned', reportId]);
       await c.query(
@@ -79,7 +90,7 @@ export async function assignEntity(tenantId, reportId, entityId, userId) {
          VALUES ($1, $2, 'accepted', 'assigned', 'Assigned to responsible entity')`,
         [reportId, userId]);
     }
-    return { id: reportId, assignedEntityId: entityId };
+    return { id: reportId, assignedEntityId: target };
   });
 }
 

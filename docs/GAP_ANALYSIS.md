@@ -152,7 +152,11 @@ Implemented this milestone (commits: schema alignment → citizen backend → ad
 - ✅ Spec category taxonomy + responsible entities + routing reseeded; `tenant_admin` + citizen demo users.
 
 **P1 — Citizen reporting backend**
-- ✅ Photo upload `POST /reports/:id/photos` (multer, **max 3**, `sharp` compression w/ fallback, owner-only).
+- ✅ **Mandatory photos at creation**: `POST /reports` is multipart and requires 1–3 compressed
+  photos (rejected `400` if none); report + photos inserted atomically.
+- ✅ **Automatic routing applied**: on creation `assigned_entity_id` is auto-resolved from the
+  category's route; admin assign falls back to the route when `entityId` is omitted.
+- ✅ Add-more-photos `POST /reports/:id/photos` (multer, **max 3 total**, `sharp` compression w/ fallback, owner-only).
 - ✅ `GET /reports/mine` (profile history).
 - ✅ `POST /reports/:id/rating` (satisfied + comment, once resolved/closed).
 - ✅ Status-change **email** notifications; **Web Push** subscription store `POST /notifications/push`.
@@ -168,8 +172,8 @@ Implemented this milestone (commits: schema alignment → citizen backend → ad
   reporters, satisfaction).
 
 ### Still open after Week 2
-- **Frontend (Weeks 3–4)**: all citizen + admin UI; mandatory-photo enforcement at the create step
-  is a client-flow concern (backend enforces max 3 + image validation).
+- **Frontend (Weeks 3–4)**: all citizen + admin UI (the create UX should pre-compress images and
+  capture GPS; the backend already enforces the 1–3 mandatory-photo rule and auto-routing).
 - **Integration (Weeks 5–6)**: Web Push **delivery** (VAPID), **Work-order PDF** generation + email,
   **CSV/Excel export**, heat-map layer, **i18n**, accessibility/performance, HTTPS/deploy.
 - **Not run live here**: Docker was unavailable in the dev shell, so the API was validated by

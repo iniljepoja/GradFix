@@ -26,7 +26,37 @@ async function compress(buffer) {
   }
 }
 
-// Owner-only: adds compressed photos to a report, enforcing the max-3 total.
+// Compresses each upload and writes it to disk; returns metadata only (no DB writes).
+// Reusable by both report creation (mandatory photos) and the add-photos endpoint.
+export async function processFiles(tenantId, files) {
+  await mkdir(path.resolve(env.uploadDir, tenantId), { recursive: true });
+  const metas = [];
+  for (const file of files) {
+    const { data, width, height, ext } = await compress(file.buffer);
+    const key = `${tenantId}/${crypto.randomUUID()}.${ext}`;
+    await writeFile(path.resolve(env.uploadDir, key), data);
+    metas.push({ storageKey: key, url: `/uploads/${key}`, width, height, sizeBytes: data.length });
+  }
+  return metas;
+}
+
+// Inserts processed photo metadata as rows for a report, marking the primary photo.
+export async function insertPhotoRows(client, reportId, metas, { existing = 0 } = {}) {
+  const runner = client ?? { query };
+  const created = [];
+  for (const [i, m] of metas.entries()) {
+    const { rows } = await runner.query(
+      `INSERT INTO report_photos (report_id, storage_key, url, width, height, size_bytes, is_primary)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, url, width, height, is_primary AS "isPrimary"`,
+      [reportId, m.storageKey, m.url, m.width, m.height, m.sizeBytes, existing === 0 && i === 0],
+    );
+    created.push(rows[0]);
+  }
+  return created;
+}
+
+// Owner-only: adds compressed photos to an existing report, enforcing the max-3 total.
 export async function addPhotos(tenantId, reportId, userId, files) {
   if (!files?.length) throw ApiError.badRequest('At least one photo is required');
 
@@ -42,22 +72,6 @@ export async function addPhotos(tenantId, reportId, userId, files) {
     throw ApiError.badRequest(`A report may have at most ${MAX_PHOTOS} photos (has ${existing})`);
   }
 
-  const dir = path.resolve(env.uploadDir, tenantId);
-  await mkdir(dir, { recursive: true });
-
-  const created = [];
-  for (const [i, file] of files.entries()) {
-    const { data, width, height, ext } = await compress(file.buffer);
-    const key = `${tenantId}/${crypto.randomUUID()}.${ext}`;
-    await writeFile(path.resolve(env.uploadDir, key), data);
-    const isPrimary = existing === 0 && i === 0;
-    const { rows: ins } = await query(
-      `INSERT INTO report_photos (report_id, storage_key, url, width, height, size_bytes, is_primary)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, url, width, height, is_primary AS "isPrimary"`,
-      [reportId, key, `/uploads/${key}`, width, height, data.length, isPrimary],
-    );
-    created.push(ins[0]);
-  }
-  return created;
+  const metas = await processFiles(tenantId, files);
+  return insertPhotoRows(null, reportId, metas, { existing });
 }

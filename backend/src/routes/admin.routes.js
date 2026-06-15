@@ -59,8 +59,9 @@ router.patch('/reports/:id/priority',
     res.json({ data: await admin.updatePriority(req.tenant.id, req.params.id, req.body.priority) });
   }));
 
+// entityId optional → falls back to the category's automatic route.
 router.patch('/reports/:id/assign',
-  validate({ body: z.object({ entityId: z.string().uuid() }) }),
+  validate({ body: z.object({ entityId: z.string().uuid().optional() }) }),
   wrap(async (req, res) => {
     res.json({ data: await admin.assignEntity(req.tenant.id, req.params.id, req.body.entityId, req.user.id) });
   }));

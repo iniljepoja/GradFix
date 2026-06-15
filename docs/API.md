@@ -95,8 +95,8 @@ Admin category/subcategory CRUD lives under `/api/v1/admin/categories` (see the 
 | GET    | `/mine`            | ✓                   | The current user's report history                    |
 | GET    | `/:id`             | —                   | Report detail (incl. photos, current status)         |
 | GET    | `/:id/history`     | —                   | Status history timeline                              |
-| POST   | `/`                | ✓ (verified)        | Create a report                                      |
-| POST   | `/:id/photos`      | owner               | Upload up to 3 photos (`multipart/form-data`, field `photos`) |
+| POST   | `/`                | ✓ (verified)        | Create a report (`multipart/form-data`, **1–3 photos required**) |
+| POST   | `/:id/photos`      | owner               | Add more photos later (`multipart/form-data`, field `photos`, max 3 total) |
 | POST   | `/:id/rating`      | reporter            | Rate the resolution (after `resolved`/`closed`)      |
 | POST   | `/:id/upvote`      | ✓                   | Upvote (idempotent per user)                         |
 | DELETE | `/:id/upvote`      | ✓                   | Remove upvote                                        |
@@ -107,18 +107,25 @@ Staff status management (status change, priority, assignment, comments, duplicat
 **GET /reports** query params: `status`, `categoryId`, `subcategoryId`, `q` (text search),
 `sort` (`recent` | `top`), `page`, `limit`.
 
+**POST /reports** — `multipart/form-data`. Text fields + **1–3 `photos` files** (mandatory; rejected
+with `400` if none). The responsible entity is auto-resolved from the category's routing config.
+
+```
+# multipart fields
+title=Large pothole on Ilica
+description=Deep pothole near tram stop
+categoryId=…            subcategoryId=…        (optional)
+latitude=45.8131        longitude=15.9776
+address=Ilica 100        priority=high          (low|medium|high|critical, default medium)
+photos=<file>  photos=<file>                    (1–3 image files)
+```
 ```json
-// POST /reports request
-{
-  "title": "Large pothole on Ilica",
-  "description": "Deep pothole near tram stop",
-  "categoryId": "…", "subcategoryId": "…",
-  "latitude": 45.8131, "longitude": 15.9776,
-  "address": "Ilica 100, Zagreb",
-  "priority": "high"
-}
-// 201
-{ "data": { "id": "…", "status": "new", "upvoteCount": 0, "createdAt": "…" } }
+// 201 — report created with its photos; assignedEntityId set if the category has a route
+{ "data": {
+  "id": "…", "status": "new", "priority": "high", "upvoteCount": 0,
+  "assignedEntityId": "…", "createdAt": "…",
+  "photos": [ { "id": "…", "url": "/uploads/…", "isPrimary": true } ]
+} }
 ```
 
 **POST /reports/:id/photos** — `multipart/form-data`, field `photos` (1–3 files). Images are
@@ -202,7 +209,7 @@ route is tenant-scoped.
 | GET    | `/reports`                 | staff  | List reports incl. private fields (filters/search) |
 | PATCH  | `/reports/:id/status`      | staff  | Change status (validated transition + history)   |
 | PATCH  | `/reports/:id/priority`    | staff  | Update priority                                  |
-| PATCH  | `/reports/:id/assign`      | staff  | Assign to a responsible entity (`accepted`→`assigned`) |
+| PATCH  | `/reports/:id/assign`      | staff  | Assign to an entity (`accepted`→`assigned`); omit `entityId` to use the category route |
 | POST   | `/reports/:id/merge`       | staff  | Merge as duplicate of `canonicalId` (closes it)  |
 | GET    | `/reports/:id/comments`    | staff  | List internal comments                           |
 | POST   | `/reports/:id/comments`    | staff  | Add an internal comment                          |
@@ -237,7 +244,7 @@ route is tenant-scoped.
 ```json
 // PATCH /admin/reports/:id/status
 { "toStatus": "in_progress", "note": "Crew dispatched" }
-// PATCH /admin/reports/:id/assign
+// PATCH /admin/reports/:id/assign  (entityId optional → category's automatic route)
 { "entityId": "…" }
 // POST /admin/reports/:id/merge
 { "canonicalId": "…" }
