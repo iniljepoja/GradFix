@@ -168,15 +168,37 @@ Query params: `bbox=minLng,minLat,maxLng,maxLat` (required), `status`, `category
 
 ---
 
+## Public statistics — `/api/v1/stats`
+
+| Method | Path | Auth | Description                                   |
+| ------ | ---- | ---- | --------------------------------------------- |
+| GET    | `/`  | —    | Public dashboard aggregates (tenant-scoped)   |
+
+```json
+// 200
+{ "data": {
+  "total": 128,
+  "resolvedPct": 41.4,
+  "byStatus":   [ { "status": "new", "count": 30 }, { "status": "resolved", "count": 50 } ],
+  "byCategory": [ { "categoryId": "…", "name": "Public lighting", "slug": "public-lighting", "count": 22 } ]
+} }
+```
+
+Richer analytics (priority breakdown, average resolution time, most-burdened entities, active
+reporters, satisfaction) are available to staff at `GET /api/v1/admin/stats`.
+
+---
+
 ## Admin — `/api/v1/admin`
 
 All routes require an authenticated **staff** member (`reviewer`, `conductor`, `community_manager`,
 `tenant_admin`); `super_admin` always passes. Routes marked **admin** require `tenant_admin`. Every
 route is tenant-scoped.
 
-### Report management
+### Dashboard & report management
 | Method | Path                       | Auth   | Description                                      |
 | ------ | -------------------------- | ------ | ------------------------------------------------ |
+| GET    | `/stats`                   | staff  | Dashboard analytics (status/category/priority, avg resolution, top entities/reporters, satisfaction) |
 | GET    | `/reports`                 | staff  | List reports incl. private fields (filters/search) |
 | PATCH  | `/reports/:id/status`      | staff  | Change status (validated transition + history)   |
 | PATCH  | `/reports/:id/priority`    | staff  | Update priority                                  |

@@ -1,13 +1,18 @@
 # GradFix — Gap Analysis
 
 Comparison of the **Studio Present GradFix Internship Program** specification against the current
-repository (end of Week 1 / scaffolding). "Implemented" means working code, not just documentation.
+repository. "Implemented" means working code, not just documentation.
 
 > Source spec: `GradFix-Internship-Program.pdf` (30 working days, 6 weekly milestones).
-> Per the program's milestones, **Week 2 = "Backend core: API endpoints, database schema."** This
-> analysis is scoped to drive that week.
+> Per the program's milestones, **Week 2 = "Backend core: API endpoints, database schema."**
 
 Legend: ✅ implemented · 🟡 partial · ❌ missing
+
+> **Week 2 update (Backend core — complete).** Sections 1–4 below capture the *original* end-of-Week-1
+> assessment that scoped the work. The **§5 Week 2 outcome** at the bottom records what was delivered:
+> schema alignment, the full citizen reporting backend, the admin core API, and public/admin stats.
+> Most §2 (partial) and several §3 (missing) backend items are now ✅; remaining gaps are frontend
+> (Weeks 3–4) and integration features (Weeks 5–6).
 
 ---
 
@@ -128,3 +133,45 @@ can be built against a stable contract. Ordered by impact on the core citizen fl
 `002_status_lifecycle` → `003_roles` → `004_photos_ratings_comments` → `005_entities_routing` →
 seed refresh → admin router + endpoints → public stats. Add tenant-isolation tests with each new
 tenant-scoped query.
+
+> **Note:** because the schema was not yet deployed, the changes above were applied by editing
+> `001_init.sql` **directly** rather than as separate `002`–`005` migrations.
+
+---
+
+## 5. Week 2 outcome — what was delivered ✅
+
+Implemented this milestone (commits: schema alignment → citizen backend → admin core → public stats):
+
+**P0 — Schema (edited `001_init.sql` directly)**
+- ✅ `report_status` lifecycle `new→accepted→assigned→in_progress→resolved→closed` with
+  `assertTransition` + `resolved_at`/`closed_at`.
+- ✅ `user_role` system (citizen/reviewer/conductor/community_manager/tenant_admin/super_admin).
+- ✅ New tables: `responsible_entities`, `category_routes`, `report_ratings`, `report_comments`,
+  `push_subscriptions`; `reports.assigned_entity_id`/`duplicate_of_id`/`closed_at`; `photos.is_primary`.
+- ✅ Spec category taxonomy + responsible entities + routing reseeded; `tenant_admin` + citizen demo users.
+
+**P1 — Citizen reporting backend**
+- ✅ Photo upload `POST /reports/:id/photos` (multer, **max 3**, `sharp` compression w/ fallback, owner-only).
+- ✅ `GET /reports/mine` (profile history).
+- ✅ `POST /reports/:id/rating` (satisfied + comment, once resolved/closed).
+- ✅ Status-change **email** notifications; **Web Push** subscription store `POST /notifications/push`.
+- ✅ Gamification **badges** in `GET /auth/me`.
+
+**P2 — Admin core API (`/api/v1/admin`, staff-gated)**
+- ✅ Report management: list (filters/search/private fields), status, priority, assign-to-entity,
+  duplicate merge, internal comments.
+- ✅ Responsible-entity CRUD + category routing; category/subcategory CRUD; user role management.
+
+**P3 — Statistics**
+- ✅ Public `GET /stats`; staff `GET /admin/stats` (avg resolution, most-burdened entities, active
+  reporters, satisfaction).
+
+### Still open after Week 2
+- **Frontend (Weeks 3–4)**: all citizen + admin UI; mandatory-photo enforcement at the create step
+  is a client-flow concern (backend enforces max 3 + image validation).
+- **Integration (Weeks 5–6)**: Web Push **delivery** (VAPID), **Work-order PDF** generation + email,
+  **CSV/Excel export**, heat-map layer, **i18n**, accessibility/performance, HTTPS/deploy.
+- **Not run live here**: Docker was unavailable in the dev shell, so the API was validated by
+  syntax + import/export cross-checks and unit tests, not an end-to-end DB run. Run
+  `docker compose up -d && npm run migrate && npm run seed && npm run dev` to verify locally.

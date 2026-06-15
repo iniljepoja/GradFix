@@ -6,6 +6,7 @@ import * as admin from '../services/admin.service.js';
 import * as entities from '../services/entity.service.js';
 import * as categories from '../services/category.service.js';
 import { changeStatus } from '../services/report.service.js';
+import { adminStats } from '../services/stats.service.js';
 
 export const router = Router();
 
@@ -20,6 +21,11 @@ const ENTITY_TYPE = z.enum(['company', 'ngo', 'informal_group', 'department']);
 const ASSIGNABLE_ROLE = z.enum(['citizen', 'reviewer', 'conductor', 'community_manager', 'tenant_admin']);
 
 const wrap = (fn) => async (req, res, next) => { try { await fn(req, res); } catch (err) { next(err); } };
+
+// ── Dashboard statistics ────────────────────────────────────────────────────
+router.get('/stats', wrap(async (req, res) => {
+  res.json({ data: await adminStats(req.tenant.id) });
+}));
 
 // ── Report management ──────────────────────────────────────────────────────
 router.get('/reports',
