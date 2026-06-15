@@ -56,6 +56,16 @@ Base URL: `/api/v1`
 
 **POST /reset-password** — `{ "token": "…", "password": "newSecret!1" }`
 
+**GET /me** → profile including gamification badge:
+```json
+{ "data": {
+  "id": "…", "email": "…", "fullName": "…", "role": "citizen", "isEmailVerified": true,
+  "reportCount": 7,
+  "badge": { "rank": 2, "title": "Active Citizen" },
+  "nextBadge": { "rank": 3, "title": "City Guardian", "at": 15 }
+} }
+```
+
 ---
 
 ## Categories — `/api/v1/categories`
@@ -64,18 +74,16 @@ Base URL: `/api/v1`
 | ------ | -------------------------- | ------------- | --------------------------------- |
 | GET    | `/`                        | —             | List active categories for tenant |
 | GET    | `/:id/subcategories`       | —             | List subcategories of a category  |
-| POST   | `/`                        | admin         | Create category                   |
-| PATCH  | `/:id`                     | admin         | Update category                   |
-| DELETE | `/:id`                     | admin         | Deactivate category               |
-| POST   | `/:id/subcategories`       | admin         | Create subcategory                |
 
 ```json
 // GET /categories → 200
 { "data": [
-  { "id": "…", "name": "Roads", "slug": "roads", "icon": "road", "sortOrder": 0 },
-  { "id": "…", "name": "Lighting", "slug": "lighting", "icon": "bulb", "sortOrder": 1 }
+  { "id": "…", "name": "Urban furniture", "slug": "urban-furniture", "icon": "bench", "sortOrder": 0 },
+  { "id": "…", "name": "Public lighting", "slug": "public-lighting", "icon": "bulb", "sortOrder": 1 }
 ] }
 ```
+
+Admin category/subcategory CRUD lives under `/api/v1/admin/categories` (see the Admin section).
 
 ---
 
@@ -84,18 +92,20 @@ Base URL: `/api/v1`
 | Method | Path               | Auth                | Description                                          |
 | ------ | ------------------ | ------------------- | ---------------------------------------------------- |
 | GET    | `/`                | —                   | List/filter reports (public)                         |
+| GET    | `/mine`            | ✓                   | The current user's report history                    |
 | GET    | `/:id`             | —                   | Report detail (incl. photos, current status)         |
 | GET    | `/:id/history`     | —                   | Status history timeline                              |
 | POST   | `/`                | ✓ (verified)        | Create a report                                      |
-| PATCH  | `/:id`             | owner / moderator   | Edit title/description/category (limited fields)     |
-| DELETE | `/:id`             | owner / admin       | Delete a report                                      |
-| POST   | `/:id/photos`      | owner               | Upload photo(s) (`multipart/form-data`, field `photos`) |
-| PATCH  | `/:id/status`      | moderator / admin   | Change status (records history)                      |
+| POST   | `/:id/photos`      | owner               | Upload up to 3 photos (`multipart/form-data`, field `photos`) |
+| POST   | `/:id/rating`      | reporter            | Rate the resolution (after `resolved`/`closed`)      |
 | POST   | `/:id/upvote`      | ✓                   | Upvote (idempotent per user)                         |
 | DELETE | `/:id/upvote`      | ✓                   | Remove upvote                                        |
 
+Staff status management (status change, priority, assignment, comments, duplicate merge) lives under
+`/api/v1/admin/reports` — see the Admin section.
+
 **GET /reports** query params: `status`, `categoryId`, `subcategoryId`, `q` (text search),
-`sort` (`recent` | `top` | `nearest`), `page`, `limit`.
+`sort` (`recent` | `top`), `page`, `limit`.
 
 ```json
 // POST /reports request
@@ -108,13 +118,29 @@ Base URL: `/api/v1`
   "priority": "high"
 }
 // 201
-{ "data": { "id": "…", "status": "submitted", "upvoteCount": 0, "createdAt": "…" } }
+{ "data": { "id": "…", "status": "new", "upvoteCount": 0, "createdAt": "…" } }
 ```
 
-**PATCH /reports/:id/status**
+**POST /reports/:id/photos** — `multipart/form-data`, field `photos` (1–3 files). Images are
+compressed server-side. → `201 { "data": [ { "id": "…", "url": "/uploads/…", "isPrimary": true } ] }`
+
+**POST /reports/:id/rating** — `{ "satisfied": true, "comment": "Fixed quickly" }` (reporter only,
+once the report is `resolved`/`closed`).
+
+---
+
+## Notifications — `/api/v1/notifications`
+
+| Method | Path     | Auth | Description                                  |
+| ------ | -------- | ---- | -------------------------------------------- |
+| POST   | `/push`  | ✓    | Register a Web Push subscription for the user |
+
+Status-change emails are sent automatically to the reporter. Push delivery is deferred (subscriptions
+are stored; delivery wires up once VAPID keys are provisioned).
+
 ```json
-{ "toStatus": "in_progress", "note": "Crew dispatched" }
-// 200 → appends a report_status_history row
+// POST /notifications/push
+{ "endpoint": "https://push…", "keys": { "p256dh": "…", "auth": "…" } }
 ```
 
 ---
@@ -134,7 +160,7 @@ Query params: `bbox=minLng,minLat,maxLng,maxLat` (required), `status`, `category
   "features": [
     { "type": "Feature",
       "geometry": { "type": "Point", "coordinates": [15.9776, 45.8131] },
-      "properties": { "id": "…", "title": "…", "status": "submitted", "categorySlug": "roads",
+      "properties": { "id": "…", "title": "…", "status": "new", "categorySlug": "traffic-infrastructure",
                       "upvoteCount": 12 } }
   ]
 }

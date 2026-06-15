@@ -1,5 +1,6 @@
 import { query, withTransaction } from '../config/db.js';
 import { ApiError } from '../utils/ApiError.js';
+import { notifyStatusChange } from './notification.service.js';
 
 // Allowed status transitions per the spec lifecycle:
 // new → accepted → assigned → in_progress → resolved → closed (with reopen + early-close paths).
@@ -92,9 +93,9 @@ export async function history(tenantId, reportId) {
 }
 
 export async function changeStatus(tenantId, reportId, userId, { toStatus, note }) {
-  return withTransaction(async (c) => {
+  const result = await withTransaction(async (c) => {
     const { rows } = await c.query(
-      'SELECT status FROM reports WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
+      'SELECT status, title FROM reports WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
       [reportId, tenantId],
     );
     if (!rows[0]) throw ApiError.notFound('Report not found');
@@ -112,8 +113,53 @@ export async function changeStatus(tenantId, reportId, userId, { toStatus, note 
        VALUES ($1, $2, $3, $4, $5)`,
       [reportId, userId, fromStatus, toStatus, note ?? null],
     );
-    return { id: reportId, fromStatus, status: toStatus };
+    return { id: reportId, fromStatus, status: toStatus, title: rows[0].title };
   });
+
+  // Notify after commit so a mailer failure can't roll back the status change.
+  notifyStatusChange({ reportId, title: result.title, toStatus }).catch((err) =>
+    console.error('Status notification failed:', err.message));
+
+  return { id: result.id, fromStatus: result.fromStatus, status: result.status };
+}
+
+// Reports filed by a given user (profile history), most recent first.
+export async function listMine(tenantId, userId, { page = 1, limit = 20 } = {}) {
+  const offset = (page - 1) * limit;
+  const { rows: countRows } = await query(
+    'SELECT count(*)::int AS total FROM reports WHERE tenant_id = $1 AND reporter_id = $2',
+    [tenantId, userId]);
+  const { rows } = await query(
+    `SELECT id, title, status, priority, category_id AS "categoryId",
+            upvote_count AS "upvoteCount", created_at AS "createdAt", resolved_at AS "resolvedAt"
+     FROM reports WHERE tenant_id = $1 AND reporter_id = $2
+     ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+    [tenantId, userId]);
+  return { items: rows, total: countRows[0].total };
+}
+
+// The reporter rates the resolution (one rating per report, only once resolved/closed).
+export async function rateResolution(tenantId, reportId, userId, { satisfied, comment }) {
+  const { rows } = await query(
+    'SELECT reporter_id, status FROM reports WHERE id = $1 AND tenant_id = $2', [reportId, tenantId]);
+  if (!rows[0]) throw ApiError.notFound('Report not found');
+  if (rows[0].reporter_id !== userId) throw ApiError.forbidden('Only the reporter can rate resolution');
+  if (!['resolved', 'closed'].includes(rows[0].status)) {
+    throw ApiError.badRequest('Report is not resolved yet');
+  }
+  const { rows: ins } = await query(
+    `INSERT INTO report_ratings (report_id, rated_by, satisfied, comment)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (report_id) DO UPDATE SET satisfied = EXCLUDED.satisfied, comment = EXCLUDED.comment
+     RETURNING satisfied, comment, created_at AS "createdAt"`,
+    [reportId, userId, satisfied, comment ?? null]);
+  return ins[0];
+}
+
+// Count of reports filed by a user — used for gamification badges.
+export async function reporterReportCount(userId) {
+  const { rows } = await query('SELECT count(*)::int AS n FROM reports WHERE reporter_id = $1', [userId]);
+  return rows[0].n;
 }
 
 export async function upvote(tenantId, reportId, userId) {

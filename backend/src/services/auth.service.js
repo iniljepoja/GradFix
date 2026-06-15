@@ -6,6 +6,8 @@ import { env } from '../config/env.js';
 import {
   generateOpaqueToken, hashToken, signAccessToken, refreshExpiry,
 } from '../utils/tokens.js';
+import { badgeForCount } from '../utils/badges.js';
+import { reporterReportCount } from './report.service.js';
 
 const VERIFY_TTL_HOURS = 24;
 const RESET_TTL_HOURS = 1;
@@ -152,5 +154,9 @@ export async function getProfile(userId) {
   );
   if (!rows[0]) throw ApiError.notFound('User not found');
   const u = rows[0];
-  return { id: u.id, email: u.email, fullName: u.full_name, role: u.role, isEmailVerified: u.is_email_verified };
+  const count = await reporterReportCount(userId);
+  return {
+    id: u.id, email: u.email, fullName: u.full_name, role: u.role,
+    isEmailVerified: u.is_email_verified, ...badgeForCount(count),
+  };
 }
