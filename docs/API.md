@@ -170,17 +170,59 @@ Query params: `bbox=minLng,minLat,maxLng,maxLat` (required), `status`, `category
 
 ## Admin — `/api/v1/admin`
 
-Tenant `admin` (scoped to their tenant) and `super_admin` (cross-tenant) routes.
+All routes require an authenticated **staff** member (`reviewer`, `conductor`, `community_manager`,
+`tenant_admin`); `super_admin` always passes. Routes marked **admin** require `tenant_admin`. Every
+route is tenant-scoped.
 
-| Method | Path                        | Auth        | Description                              |
-| ------ | --------------------------- | ----------- | ---------------------------------------- |
-| GET    | `/reports`                  | admin       | All reports (incl. private fields)       |
-| GET    | `/reports/stats`            | admin       | Counts by status/category, resolution KPIs |
-| GET    | `/users`                    | admin       | List tenant users                        |
-| PATCH  | `/users/:id/role`           | admin       | Change a user's role                     |
-| GET    | `/tenants`                  | super_admin | List tenants                             |
-| POST   | `/tenants`                  | super_admin | Create a tenant                          |
-| PATCH  | `/tenants/:id`              | super_admin | Update tenant settings                   |
+### Report management
+| Method | Path                       | Auth   | Description                                      |
+| ------ | -------------------------- | ------ | ------------------------------------------------ |
+| GET    | `/reports`                 | staff  | List reports incl. private fields (filters/search) |
+| PATCH  | `/reports/:id/status`      | staff  | Change status (validated transition + history)   |
+| PATCH  | `/reports/:id/priority`    | staff  | Update priority                                  |
+| PATCH  | `/reports/:id/assign`      | staff  | Assign to a responsible entity (`accepted`→`assigned`) |
+| POST   | `/reports/:id/merge`       | staff  | Merge as duplicate of `canonicalId` (closes it)  |
+| GET    | `/reports/:id/comments`    | staff  | List internal comments                           |
+| POST   | `/reports/:id/comments`    | staff  | Add an internal comment                          |
+
+`GET /reports` query params: `status`, `priority`, `categoryId`, `assignedEntityId`, `q`,
+`sort` (`recent` | `top` | `priority`), `page`, `limit`.
+
+### Responsible entities & routing
+| Method | Path                          | Auth  | Description                              |
+| ------ | ----------------------------- | ----- | ---------------------------------------- |
+| GET    | `/entities`                   | staff | List responsible entities                |
+| POST   | `/entities`                   | admin | Create entity                            |
+| PATCH  | `/entities/:id`               | admin | Update / deactivate entity               |
+| GET    | `/routes`                     | staff | List category → entity routing           |
+| PUT    | `/categories/:id/route`       | admin | Set the entity a category routes to      |
+
+### Category configuration
+| Method | Path                                | Auth  | Description                |
+| ------ | ----------------------------------- | ----- | -------------------------- |
+| POST   | `/categories`                       | admin | Create category            |
+| PATCH  | `/categories/:id`                   | admin | Update category            |
+| DELETE | `/categories/:id`                   | admin | Deactivate category        |
+| POST   | `/categories/:id/subcategories`     | admin | Create subcategory         |
+| DELETE | `/subcategories/:id`                | admin | Deactivate subcategory     |
+
+### Users
+| Method | Path                | Auth  | Description                                       |
+| ------ | ------------------- | ----- | ------------------------------------------------- |
+| GET    | `/users`            | admin | List tenant users                                 |
+| PATCH  | `/users/:id/role`   | admin | Change a user's role (citizen…tenant_admin)       |
+
+```json
+// PATCH /admin/reports/:id/status
+{ "toStatus": "in_progress", "note": "Crew dispatched" }
+// PATCH /admin/reports/:id/assign
+{ "entityId": "…" }
+// POST /admin/reports/:id/merge
+{ "canonicalId": "…" }
+```
+
+> Public statistics (`GET /api/v1/stats`) and super-admin tenant management are documented in their
+> own sections / planned for a later milestone.
 
 ---
 

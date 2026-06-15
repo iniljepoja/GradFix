@@ -4,6 +4,7 @@ import { router as categoriesRouter } from './categories.routes.js';
 import { router as reportsRouter } from './reports.routes.js';
 import { router as mapRouter } from './map.routes.js';
 import { router as notificationsRouter } from './notifications.routes.js';
+import { router as adminRouter } from './admin.routes.js';
 
 export const router = Router();
 
@@ -12,5 +13,4 @@ router.use('/categories', categoriesRouter);
 router.use('/reports', reportsRouter);
 router.use('/map', mapRouter);
 router.use('/notifications', notificationsRouter);
-
-// /admin router wired in P2 (admin core API).
+router.use('/admin', adminRouter);

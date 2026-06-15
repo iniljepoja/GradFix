@@ -32,4 +32,4 @@ router.get('/:id/subcategories', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Admin CRUD (POST/PATCH/DELETE) — to be added in week 3 with authorize('admin').
+// Admin category/subcategory CRUD lives in the admin router (/api/v1/admin/categories).
