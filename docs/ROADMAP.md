@@ -5,8 +5,8 @@ Aligned to the internship program milestones. Each week ends with something demo
 | Week | Focus              | Status |
 | ---- | ------------------ | ------ |
 | 1    | Setup & Planning   | ✅ done |
-| 2    | Backend core       | ✅ done (this milestone) |
-| 3    | Frontend — Citizens | ⏭ next |
+| 2    | Backend core       | ✅ accepted feature-complete |
+| 3    | Frontend — Citizens | 🚧 in progress |
 | 4    | Admin panel        | planned |
 | 5    | Integration        | planned |
 | 6    | Polish & Demo      | planned |
