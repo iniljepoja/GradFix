@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validate.js';
-import { authenticate, authorize } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import * as reports from '../services/report.service.js';
 
 export const router = Router();
@@ -60,19 +60,7 @@ router.post('/', authenticate,
     catch (err) { next(err); }
   });
 
-// PATCH /api/v1/reports/:id/status — moderator/admin; records history.
-router.patch('/:id/status', authenticate, authorize('moderator', 'admin'),
-  validate({
-    body: z.object({
-      toStatus: z.enum(['submitted', 'acknowledged', 'in_progress', 'resolved', 'rejected', 'duplicate']),
-      note: z.string().optional(),
-    }),
-  }),
-  async (req, res, next) => {
-    try {
-      res.json({ data: await reports.changeStatus(req.tenant.id, req.params.id, req.user.id, req.body) });
-    } catch (err) { next(err); }
-  });
+// Staff status management lives in the admin router (/api/v1/admin/reports/:id/status).
 
 // POST/DELETE /api/v1/reports/:id/upvote — authenticated, idempotent.
 router.post('/:id/upvote', authenticate, async (req, res, next) => {

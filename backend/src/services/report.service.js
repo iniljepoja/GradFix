@@ -1,6 +1,24 @@
 import { query, withTransaction } from '../config/db.js';
 import { ApiError } from '../utils/ApiError.js';
 
+// Allowed status transitions per the spec lifecycle:
+// new → accepted → assigned → in_progress → resolved → closed (with reopen + early-close paths).
+export const STATUS_TRANSITIONS = {
+  new: ['accepted', 'closed'],
+  accepted: ['assigned', 'in_progress', 'closed'],
+  assigned: ['in_progress', 'closed'],
+  in_progress: ['resolved', 'closed'],
+  resolved: ['closed', 'in_progress'],
+  closed: [],
+};
+
+export function assertTransition(from, to) {
+  if (from === to) throw ApiError.badRequest(`Report is already "${to}"`);
+  if (!STATUS_TRANSITIONS[from]?.includes(to)) {
+    throw ApiError.badRequest(`Illegal status transition: ${from} → ${to}`);
+  }
+}
+
 export async function list(tenantId, { status, categoryId, q, sort, page, limit }) {
   const where = ['tenant_id = $1'];
   const params = [tenantId];
@@ -81,10 +99,12 @@ export async function changeStatus(tenantId, reportId, userId, { toStatus, note 
     );
     if (!rows[0]) throw ApiError.notFound('Report not found');
     const fromStatus = rows[0].status;
+    assertTransition(fromStatus, toStatus);
 
     const resolvedAt = toStatus === 'resolved' ? 'now()' : 'resolved_at';
+    const closedAt = toStatus === 'closed' ? 'now()' : 'closed_at';
     await c.query(
-      `UPDATE reports SET status = $1, resolved_at = ${resolvedAt} WHERE id = $2`,
+      `UPDATE reports SET status = $1, resolved_at = ${resolvedAt}, closed_at = ${closedAt} WHERE id = $2`,
       [toStatus, reportId],
     );
     await c.query(
@@ -92,7 +112,7 @@ export async function changeStatus(tenantId, reportId, userId, { toStatus, note 
        VALUES ($1, $2, $3, $4, $5)`,
       [reportId, userId, fromStatus, toStatus, note ?? null],
     );
-    return { id: reportId, status: toStatus };
+    return { id: reportId, fromStatus, status: toStatus };
   });
 }
 

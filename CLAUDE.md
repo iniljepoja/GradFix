@@ -50,6 +50,8 @@ These are the cross-cutting concerns that span multiple files — read these bef
   `req.tenant.id`.** Forgetting this is the #1 source of cross-tenant data leaks.
 - `super_admin` users are tenant-less (`users.tenant_id` may be null) and operate across tenants
   through `/api/v1/admin` routes.
+- **Roles** (`user_role` enum): `citizen`, `reviewer`, `conductor`, `community_manager`,
+  `tenant_admin`, `super_admin`. `authorize(...roles)` gates routes; `super_admin` always passes.
 
 ### Request pipeline (backend)
 Order matters in `src/app.js`: `helmet` → `cors` → body parsing → `tenant` resolution → route →
@@ -65,9 +67,14 @@ Controllers throw `ApiError` (`utils/ApiError.js`); the error handler converts t
   stored. Unverified users can log in but are blocked from creating reports.
 
 ### Reports & status lifecycle
-- Status flow: `submitted → acknowledged → in_progress → resolved` (or `rejected` / `duplicate`).
-  Every status change appends a row to `report_status_history` — never mutate `reports.status`
-  without recording history. Use the report service, not direct UPDATEs.
+- Status flow: `new → accepted → assigned → in_progress → resolved → closed` (with reopen
+  `resolved → in_progress` and early-close paths). Allowed transitions are enforced by
+  `STATUS_TRANSITIONS` / `assertTransition` in `services/report.service.js`.
+- Every status change appends a row to `report_status_history` and may set `resolved_at` / `closed_at`
+  — never mutate `reports.status` without going through `changeStatus` (records history + fires
+  notifications). Use the report service, not direct UPDATEs.
+- **Duplicate merge**: a duplicate report gets `duplicate_of_id` set to the canonical report and is
+  moved to `closed`; it is not a status value.
 - `reports.upvote_count` is **denormalized**. It is maintained alongside inserts/deletes in
   `upvotes` (within the same transaction). The `upvotes` table has a `UNIQUE(report_id, user_id)`.
 

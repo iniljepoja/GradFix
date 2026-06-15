@@ -85,9 +85,16 @@
 | tenants → reports                         | 1 : N       | Every report belongs to exactly one tenant         |
 | users → reports                           | 1 : N       | `reporter_id` (nullable for anonymous reports)     |
 | categories → reports                      | 1 : N       | Required category, optional subcategory            |
-| reports → report_photos                   | 1 : N       | Zero or more photos per report                     |
+| reports → report_photos                   | 1 : N       | 1–3 photos per report (mandatory at creation)      |
 | reports → report_status_history           | 1 : N       | One row per status change (append-only audit)      |
 | reports → upvotes ← users                 | M : N       | Join table with `UNIQUE(report_id, user_id)`       |
+| reports → report_ratings                  | 1 : 1       | One resolution rating per report                   |
+| reports → report_comments ← users         | 1 : N       | Internal (admin-only) comments                     |
+| tenants → responsible_entities            | 1 : N       | Companies / NGOs / groups / departments            |
+| responsible_entities → reports            | 1 : N       | `assigned_entity_id` (nullable until assigned)     |
+| categories → category_routes → entities   | 1 : 1 : 1   | Default routing: one entity per category           |
+| reports → reports                         | self        | `duplicate_of_id` (canonical report on merge)      |
+| users → push_subscriptions                | 1 : N       | Web Push endpoints                                 |
 | users → email_verification_tokens         | 1 : N       | Single-use, expiring, hashed                       |
 | users → password_reset_tokens            | 1 : N       | Single-use, expiring, hashed                       |
 | users → refresh_tokens                    | 1 : N       | Rotated on use, revocable                          |
@@ -95,8 +102,9 @@
 ## Integrity rules
 
 - All `tenant_id` columns are `NOT NULL` except on `users` (to permit `super_admin`).
-- Deleting a tenant cascades to its users, categories, and reports (`ON DELETE CASCADE`).
-- Deleting a report cascades to its photos, status history, and upvotes.
-- `upvotes` enforces one upvote per `(report_id, user_id)`.
+- Deleting a tenant cascades to its users, categories, reports, and responsible entities.
+- Deleting a report cascades to its photos, status history, upvotes, ratings, and comments.
+- `upvotes` enforces one upvote per `(report_id, user_id)`; `report_ratings` one per `(report_id)`.
 - `reports.upvote_count` is denormalized and kept consistent inside the upvote/unvote transaction.
-- Email uniqueness is **per tenant**: `UNIQUE(tenant_id, email)`.
+- Email uniqueness is **per tenant**: `UNIQUE(tenant_id, email)`; entity name too: `UNIQUE(tenant_id, name)`.
+- Status changes follow `STATUS_TRANSITIONS`; duplicates set `duplicate_of_id` and move to `closed`.
