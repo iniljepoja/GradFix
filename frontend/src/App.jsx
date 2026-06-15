@@ -7,6 +7,7 @@ import RegisterPage from './features/auth/RegisterPage.jsx';
 import ForgotPasswordPage from './features/auth/ForgotPasswordPage.jsx';
 import ResetPasswordPage from './features/auth/ResetPasswordPage.jsx';
 import VerifyEmailPage from './features/auth/VerifyEmailPage.jsx';
+import DashboardPage from './features/dashboard/DashboardPage.jsx';
 
 export default function App() {
   return (
@@ -21,7 +22,7 @@ export default function App() {
         <Route path="/verify-email" element={<VerifyEmailPage />} />
 
         {/* Authenticated (filled in by later Week 3 milestones) */}
-        <Route path="/dashboard" element={<ProtectedRoute><Placeholder name="Dashboard" /></ProtectedRoute>} />
+        <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/reports/new" element={
           <ProtectedRoute requireVerified><Placeholder name="New report" /></ProtectedRoute>} />
 
