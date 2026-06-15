@@ -1,0 +1,99 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project
+
+GradFix is a multi-tenant PWA for reporting urban infrastructure problems. Citizens file geo-located
+reports with photos; municipalities resolve them via an admin panel. One deployment serves many
+municipalities (tenants).
+
+- **Backend**: Node.js + Express REST API (`backend/`)
+- **Frontend**: React (Vite) PWA with Leaflet/OpenStreetMap (`frontend/`)
+- **Database**: PostgreSQL
+
+## Commands
+
+All backend commands run from `backend/`, all frontend commands from `frontend/`.
+
+```bash
+# Database (from repo root)
+docker compose up -d            # start local PostgreSQL on :5432
+
+# Backend
+npm run dev                     # nodemon dev server (:4000)
+npm start                       # production server
+npm run migrate                 # apply SQL migrations in src/db/migrations
+npm run seed                    # load demo tenant, admin user, categories
+npm test                        # run all tests (node --test)
+npm test -- <file>              # run a single test file
+npm run lint                    # eslint
+
+# Frontend
+npm run dev                     # Vite dev server (:5173)
+npm run build                   # production build
+npm run preview                 # preview production build
+npm test                        # vitest
+npm test -- <pattern>           # run tests matching pattern
+npm run lint
+```
+
+## Architecture essentials
+
+These are the cross-cutting concerns that span multiple files — read these before making changes.
+
+### Multi-tenancy (shared DB, shared schema)
+- Every tenant-scoped table carries a `tenant_id` (FK → `tenants`). There is **no separate database
+  or schema per tenant** — isolation is enforced in the query layer, not by Postgres.
+- The tenant is resolved per request by `middleware/tenant.js`, from the `X-Tenant` header or
+  subdomain, and attached as `req.tenant`. **Every query against a tenant-scoped table must filter by
+  `req.tenant.id`.** Forgetting this is the #1 source of cross-tenant data leaks.
+- `super_admin` users are tenant-less (`users.tenant_id` may be null) and operate across tenants
+  through `/api/v1/admin` routes.
+
+### Request pipeline (backend)
+Order matters in `src/app.js`: `helmet` → `cors` → body parsing → `tenant` resolution → route →
+route-level `authenticate` / `authorize(role)` → controller → centralized `errorHandler` (last).
+Controllers throw `ApiError` (`utils/ApiError.js`); the error handler converts them to JSON. Never
+`res.status().json()` an error directly from a controller.
+
+### Auth
+- JWT access token (short-lived, ~15 min) + refresh token (long-lived, stored hashed in
+  `refresh_tokens`). `middleware/auth.js` verifies the access token and loads `req.user`.
+- Email verification and password reset use single-use, hashed, expiring tokens
+  (`email_verification_tokens`, `password_reset_tokens`). Plain tokens are emailed; only hashes are
+  stored. Unverified users can log in but are blocked from creating reports.
+
+### Reports & status lifecycle
+- Status flow: `submitted → acknowledged → in_progress → resolved` (or `rejected` / `duplicate`).
+  Every status change appends a row to `report_status_history` — never mutate `reports.status`
+  without recording history. Use the report service, not direct UPDATEs.
+- `reports.upvote_count` is **denormalized**. It is maintained alongside inserts/deletes in
+  `upvotes` (within the same transaction). The `upvotes` table has a `UNIQUE(report_id, user_id)`.
+
+### Spatial data
+- Reports store `latitude`/`longitude` as `double precision`. The public map endpoint
+  (`GET /api/v1/map/reports`) returns GeoJSON filtered by a bounding box. PostGIS is **not** required
+  for the MVP; if added later, migrate to a `geography(Point)` column and update the map query.
+
+### Frontend
+- API access goes through `src/api/client.js` (a single axios/fetch wrapper that injects the
+  `Authorization` header, the `X-Tenant` header, and handles 401 → refresh-token retry). Do not call
+  `fetch` directly from components.
+- PWA: `public/manifest.webmanifest` + service worker (via `vite-plugin-pwa`). Map rendering is
+  isolated in `src/features/map/` using react-leaflet.
+
+## Conventions
+
+- API is versioned under `/api/v1`. Responses use `{ data, meta }` on success and
+  `{ error: { code, message, details } }` on failure.
+- Validation lives at the route boundary (a `validate(schema)` middleware), not in controllers.
+- DB access is parameterized queries through the shared `pg` pool (`src/config/db.js`). No ORM;
+  no string-interpolated SQL.
+- Migrations are plain `.sql` files in `src/db/migrations`, applied in filename order. Add a new
+  numbered file; never edit an applied migration.
+
+## Docs
+
+Authoritative specs live in `docs/` (`ARCHITECTURE.md`, `DATABASE.md`, `ERD.md`, `API.md`,
+`ROADMAP.md`). Keep them in sync when changing the schema or API surface.

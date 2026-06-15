@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+*.local
+
+# Build output
+dist/
+build/
+frontend/dev-dist/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Uploads (local file storage)
+backend/uploads/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/

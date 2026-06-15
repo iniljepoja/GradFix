@@ -1,0 +1,131 @@
+import { query, withTransaction } from '../config/db.js';
+import { ApiError } from '../utils/ApiError.js';
+
+export async function list(tenantId, { status, categoryId, q, sort, page, limit }) {
+  const where = ['tenant_id = $1'];
+  const params = [tenantId];
+  if (status) { params.push(status); where.push(`status = $${params.length}`); }
+  if (categoryId) { params.push(categoryId); where.push(`category_id = $${params.length}`); }
+  if (q) { params.push(`%${q}%`); where.push(`(title ILIKE $${params.length} OR description ILIKE $${params.length})`); }
+
+  const orderBy = sort === 'top' ? 'upvote_count DESC, created_at DESC' : 'created_at DESC';
+  const whereSql = where.join(' AND ');
+
+  const { rows: countRows } = await query(`SELECT count(*)::int AS total FROM reports WHERE ${whereSql}`, params);
+  const offset = (page - 1) * limit;
+  const { rows } = await query(
+    `SELECT id, title, status, priority, category_id AS "categoryId",
+            latitude, longitude, upvote_count AS "upvoteCount", created_at AS "createdAt"
+     FROM reports WHERE ${whereSql}
+     ORDER BY ${orderBy}
+     LIMIT ${limit} OFFSET ${offset}`,
+    params,
+  );
+  return { items: rows, total: countRows[0].total };
+}
+
+export async function getById(tenantId, id) {
+  const { rows } = await query(
+    `SELECT id, title, description, status, priority, category_id AS "categoryId",
+            subcategory_id AS "subcategoryId", latitude, longitude, address,
+            upvote_count AS "upvoteCount", created_at AS "createdAt", resolved_at AS "resolvedAt"
+     FROM reports WHERE tenant_id = $1 AND id = $2`,
+    [tenantId, id],
+  );
+  if (!rows[0]) throw ApiError.notFound('Report not found');
+  const { rows: photos } = await query(
+    `SELECT id, url, width, height FROM report_photos WHERE report_id = $1 ORDER BY created_at`,
+    [id],
+  );
+  return { ...rows[0], photos };
+}
+
+export async function create(tenantId, reporterId, body) {
+  // Enforce verified email before allowing report creation.
+  const { rows: u } = await query('SELECT is_email_verified FROM users WHERE id = $1', [reporterId]);
+  if (!u[0]?.is_email_verified) throw new ApiError(403, 'EMAIL_NOT_VERIFIED', 'Verify your email first');
+
+  // Ensure the category belongs to this tenant.
+  const { rows: cat } = await query('SELECT id FROM categories WHERE id = $1 AND tenant_id = $2',
+    [body.categoryId, tenantId]);
+  if (!cat[0]) throw ApiError.badRequest('Unknown category for this tenant');
+
+  const { rows } = await query(
+    `INSERT INTO reports
+       (tenant_id, reporter_id, category_id, subcategory_id, title, description,
+        latitude, longitude, address, priority)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+     RETURNING id, status, upvote_count AS "upvoteCount", created_at AS "createdAt"`,
+    [tenantId, reporterId, body.categoryId, body.subcategoryId ?? null, body.title,
+      body.description ?? null, body.latitude, body.longitude, body.address ?? null, body.priority],
+  );
+  return rows[0];
+}
+
+export async function history(tenantId, reportId) {
+  await assertReportInTenant(tenantId, reportId);
+  const { rows } = await query(
+    `SELECT from_status AS "fromStatus", to_status AS "toStatus", note,
+            changed_by AS "changedBy", created_at AS "createdAt"
+     FROM report_status_history WHERE report_id = $1 ORDER BY created_at`,
+    [reportId],
+  );
+  return rows;
+}
+
+export async function changeStatus(tenantId, reportId, userId, { toStatus, note }) {
+  return withTransaction(async (c) => {
+    const { rows } = await c.query(
+      'SELECT status FROM reports WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
+      [reportId, tenantId],
+    );
+    if (!rows[0]) throw ApiError.notFound('Report not found');
+    const fromStatus = rows[0].status;
+
+    const resolvedAt = toStatus === 'resolved' ? 'now()' : 'resolved_at';
+    await c.query(
+      `UPDATE reports SET status = $1, resolved_at = ${resolvedAt} WHERE id = $2`,
+      [toStatus, reportId],
+    );
+    await c.query(
+      `INSERT INTO report_status_history (report_id, changed_by, from_status, to_status, note)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [reportId, userId, fromStatus, toStatus, note ?? null],
+    );
+    return { id: reportId, status: toStatus };
+  });
+}
+
+export async function upvote(tenantId, reportId, userId) {
+  await assertReportInTenant(tenantId, reportId);
+  return withTransaction(async (c) => {
+    const { rowCount } = await c.query(
+      `INSERT INTO upvotes (report_id, user_id) VALUES ($1, $2)
+       ON CONFLICT (report_id, user_id) DO NOTHING`,
+      [reportId, userId],
+    );
+    if (rowCount === 1) {
+      await c.query('UPDATE reports SET upvote_count = upvote_count + 1 WHERE id = $1', [reportId]);
+    }
+    const { rows } = await c.query('SELECT upvote_count AS "upvoteCount" FROM reports WHERE id = $1', [reportId]);
+    return { upvoted: true, ...rows[0] };
+  });
+}
+
+export async function removeUpvote(tenantId, reportId, userId) {
+  await assertReportInTenant(tenantId, reportId);
+  return withTransaction(async (c) => {
+    const { rowCount } = await c.query('DELETE FROM upvotes WHERE report_id = $1 AND user_id = $2',
+      [reportId, userId]);
+    if (rowCount === 1) {
+      await c.query('UPDATE reports SET upvote_count = GREATEST(upvote_count - 1, 0) WHERE id = $1', [reportId]);
+    }
+    const { rows } = await c.query('SELECT upvote_count AS "upvoteCount" FROM reports WHERE id = $1', [reportId]);
+    return { upvoted: false, ...rows[0] };
+  });
+}
+
+async function assertReportInTenant(tenantId, reportId) {
+  const { rows } = await query('SELECT 1 FROM reports WHERE id = $1 AND tenant_id = $2', [reportId, tenantId]);
+  if (!rows[0]) throw ApiError.notFound('Report not found');
+}
