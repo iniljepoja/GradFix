@@ -47,6 +47,9 @@ router.get('/reports',
       totalPages: Math.ceil(total / req.query.limit) } });
   }));
 
+router.get('/reports/:id',
+  wrap(async (req, res) => { res.json({ data: await admin.getReport(req.tenant.id, req.params.id) }); }));
+
 router.patch('/reports/:id/status',
   validate({ body: z.object({ toStatus: STATUS, note: z.string().optional() }) }),
   wrap(async (req, res) => {

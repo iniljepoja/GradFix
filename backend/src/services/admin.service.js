@@ -39,6 +39,31 @@ export async function listReports(tenantId, f) {
   return { items: rows, total: countRows[0].total };
 }
 
+// Single report with admin-only fields (assignee + reporter + category names) and its photos.
+// The public GET /reports/:id omits these, so the admin detail page uses this instead.
+export async function getReport(tenantId, reportId) {
+  const { rows } = await query(
+    `SELECT r.id, r.title, r.description, r.status, r.priority,
+            r.category_id AS "categoryId", c.name AS "categoryName",
+            r.subcategory_id AS "subcategoryId",
+            r.latitude, r.longitude, r.address, r.upvote_count AS "upvoteCount",
+            r.reporter_id AS "reporterId", u.email AS "reporterEmail", u.full_name AS "reporterName",
+            r.assigned_entity_id AS "assignedEntityId", e.name AS "assignedEntityName",
+            r.duplicate_of_id AS "duplicateOfId",
+            r.created_at AS "createdAt", r.resolved_at AS "resolvedAt", r.closed_at AS "closedAt"
+     FROM reports r
+     LEFT JOIN users u ON u.id = r.reporter_id
+     LEFT JOIN responsible_entities e ON e.id = r.assigned_entity_id
+     LEFT JOIN categories c ON c.id = r.category_id
+     WHERE r.id = $1 AND r.tenant_id = $2`,
+    [reportId, tenantId]);
+  if (!rows[0]) throw ApiError.notFound('Report not found');
+  const { rows: photos } = await query(
+    'SELECT id, url, width, height FROM report_photos WHERE report_id = $1 ORDER BY created_at',
+    [reportId]);
+  return { ...rows[0], photos };
+}
+
 async function loadReport(tenantId, reportId, client = null) {
   const runner = client ?? { query };
   const { rows } = await runner.query(

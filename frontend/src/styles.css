@@ -144,6 +144,40 @@ textarea.input { min-height: 96px; resize: vertical; }
 .nearby h4 { font-size: 1rem; }
 .nearby-actions { flex: 0 0 auto; align-items: stretch; min-width: 150px; }
 
+/* Priority pills */
+.priority-low { background: #eef1f4; color: #41505f; }
+.priority-medium { background: #fff8e1; color: #8a6d00; }
+.priority-high { background: #fff3e0; color: #b26a00; }
+.priority-critical { background: #fdecea; color: #c0392b; }
+
+/* Admin panel */
+.admin-shell { display: flex; gap: 24px; align-items: flex-start; width: 100%; max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
+.admin-sidebar { flex: 0 0 170px; position: sticky; top: 64px; display: flex; flex-direction: column; gap: 4px; }
+.admin-sidebar-title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); padding: 4px 12px; }
+.admin-navlink { padding: 9px 12px; border-radius: 8px; color: var(--text); font-weight: 500; }
+.admin-navlink:hover { background: var(--card); }
+.admin-navlink-active { background: #efeafb; color: var(--brand-dark); font-weight: 700; }
+.admin-content { flex: 1; min-width: 0; }
+
+.admin-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.admin-filters .input { max-width: 190px; }
+
+.admin-table { width: 100%; border-collapse: collapse; }
+.admin-table th { text-align: left; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.admin-table td { padding: 11px 10px; border-bottom: 1px solid var(--border); font-size: 0.92rem; }
+.admin-table tbody tr { cursor: pointer; }
+.admin-table tbody tr:hover { background: #faf8fe; }
+.admin-table tbody tr:last-child td { border-bottom: none; }
+
+/* Modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(33, 27, 51, 0.45); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 2000; }
+.modal { width: 100%; max-width: 460px; max-height: 90vh; overflow: auto; }
+
+@media (max-width: 720px) {
+  .admin-shell { flex-direction: column; padding: 16px; }
+  .admin-sidebar { position: static; flex-direction: row; flex: none; }
+}
+
 /* Status history timeline */
 .status-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
 .status-history-item { border-left: 2px solid var(--border); padding: 0 0 0 14px; position: relative; }

@@ -11,6 +11,10 @@ import DashboardPage from './features/dashboard/DashboardPage.jsx';
 import NewReportPage from './features/reports/NewReportPage.jsx';
 import ReportDetailPage from './features/reports/ReportDetailPage.jsx';
 import StatsPage from './features/stats/StatsPage.jsx';
+import AdminRoute from './components/AdminRoute.jsx';
+import AdminLayout from './features/admin/AdminLayout.jsx';
+import ReportsQueuePage from './features/admin/ReportsQueuePage.jsx';
+import AdminReportDetailPage from './features/admin/AdminReportDetailPage.jsx';
 
 export default function App() {
   return (
@@ -30,6 +34,13 @@ export default function App() {
         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/reports/new" element={
           <ProtectedRoute requireVerified><NewReportPage /></ProtectedRoute>} />
+
+        {/* Admin panel (staff only) */}
+        <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
+          <Route index element={<Navigate to="/admin/reports" replace />} />
+          <Route path="reports" element={<ReportsQueuePage />} />
+          <Route path="reports/:id" element={<AdminReportDetailPage />} />
+        </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
