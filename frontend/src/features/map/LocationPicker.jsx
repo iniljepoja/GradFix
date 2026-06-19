@@ -62,8 +62,9 @@ export default function LocationPicker({ value, onChange }) {
 
       {geoError && <div className="alert alert-info">{geoError}</div>}
 
-      <div className="map-wrap" style={{ minHeight: '42vh', borderRadius: 8, overflow: 'hidden' }}>
-        <MapContainer center={position || DEFAULT_CENTER} zoom={position ? 16 : 13}>
+      <div style={{ borderRadius: 8, overflow: 'hidden' }}>
+        <MapContainer center={position || DEFAULT_CENTER} zoom={position ? 16 : 13}
+          style={{ height: '42vh' }}>
           <TileLayer attribution={TILE_ATTRIBUTION} url={TILE_URL} subdomains={TILE_SUBDOMAINS} />
           <ClickToPlace onChange={onChange} />
           <Recenter center={recenterTo} />

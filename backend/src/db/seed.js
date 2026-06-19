@@ -8,6 +8,12 @@ export const DEMO = {
   tenant: { name: 'Grad Subotica', slug: 'subotica', centerLat: 46.1005, centerLng: 19.6651 },
   admin: { email: 'admin@gradfix.app', password: 'Admin123!', fullName: 'Demo Admin' },
   citizen: { email: 'citizen@gradfix.app', password: 'Citizen123!', fullName: 'Demo Citizen' },
+  // One demo user per staff role, so role permission separation can be exercised end-to-end.
+  staff: [
+    { email: 'reviewer@gradfix.app', password: 'Reviewer123!', fullName: 'Demo Reviewer', role: 'reviewer' },
+    { email: 'conductor@gradfix.app', password: 'Conductor123!', fullName: 'Demo Conductor', role: 'conductor' },
+    { email: 'community@gradfix.app', password: 'Community123!', fullName: 'Demo Community Manager', role: 'community_manager' },
+  ],
   // Categories and subcategories per the internship specification.
   categories: [
     { name: 'Urban furniture', slug: 'urban-furniture', icon: 'bench',
@@ -172,6 +178,7 @@ async function seed() {
 
   await upsertUser({ tenantId: tenant.id, ...DEMO.admin, role: 'tenant_admin' });
   await upsertUser({ tenantId: tenant.id, ...DEMO.citizen, role: 'citizen' });
+  for (const s of DEMO.staff) await upsertUser({ tenantId: tenant.id, ...s });
 
   const categoryIdBySlug = {};
   for (const [i, cat] of DEMO.categories.entries()) {
@@ -224,6 +231,7 @@ async function seed() {
   console.log(`Seeded tenant "${DEMO.tenant.slug}":`);
   console.log(`  admin   ${DEMO.admin.email} / ${DEMO.admin.password}  (tenant_admin)`);
   console.log(`  citizen ${DEMO.citizen.email} / ${DEMO.citizen.password}  (citizen)`);
+  for (const s of DEMO.staff) console.log(`  staff   ${s.email} / ${s.password}  (${s.role})`);
 }
 
 // Only run when executed directly (`node src/db/seed.js` / `npm run seed`), so the module can be

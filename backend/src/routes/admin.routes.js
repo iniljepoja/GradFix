@@ -15,6 +15,15 @@ const STAFF = ['reviewer', 'conductor', 'community_manager', 'tenant_admin'];
 router.use(authenticate, authorize(...STAFF));
 const tenantAdmin = authorize('tenant_admin'); // tenant configuration; super_admin still passes
 
+// Per-action role separation (super_admin passes everything via authorize):
+//   reviewer          → triage: change status, set priority, merge duplicates
+//   conductor         → operations: change status, assign to a responsible entity
+//   community_manager → citizen communication: comments only (read + comment)
+//   tenant_admin      → all of the above + tenant configuration & user management
+const canReview = authorize('reviewer', 'tenant_admin');                  // priority, merge
+const canChangeStatus = authorize('reviewer', 'conductor', 'tenant_admin');
+const canAssign = authorize('conductor', 'tenant_admin');
+
 const STATUS = z.enum(['accepted', 'assigned', 'in_progress', 'resolved', 'closed']);
 const PRIORITY = z.enum(['low', 'medium', 'high', 'critical']);
 const ENTITY_TYPE = z.enum(['company', 'ngo', 'informal_group', 'department']);
@@ -50,26 +59,26 @@ router.get('/reports',
 router.get('/reports/:id',
   wrap(async (req, res) => { res.json({ data: await admin.getReport(req.tenant.id, req.params.id) }); }));
 
-router.patch('/reports/:id/status',
+router.patch('/reports/:id/status', canChangeStatus,
   validate({ body: z.object({ toStatus: STATUS, note: z.string().optional() }) }),
   wrap(async (req, res) => {
     res.json({ data: await changeStatus(req.tenant.id, req.params.id, req.user.id, req.body) });
   }));
 
-router.patch('/reports/:id/priority',
+router.patch('/reports/:id/priority', canReview,
   validate({ body: z.object({ priority: PRIORITY }) }),
   wrap(async (req, res) => {
     res.json({ data: await admin.updatePriority(req.tenant.id, req.params.id, req.body.priority) });
   }));
 
 // entityId optional → falls back to the category's automatic route.
-router.patch('/reports/:id/assign',
+router.patch('/reports/:id/assign', canAssign,
   validate({ body: z.object({ entityId: z.string().uuid().optional() }) }),
   wrap(async (req, res) => {
     res.json({ data: await admin.assignEntity(req.tenant.id, req.params.id, req.body.entityId, req.user.id) });
   }));
 
-router.post('/reports/:id/merge',
+router.post('/reports/:id/merge', canReview,
   validate({ body: z.object({ canonicalId: z.string().uuid() }) }),
   wrap(async (req, res) => {
     res.json({ data: await admin.mergeDuplicate(req.tenant.id, req.params.id, req.body.canonicalId, req.user.id) });
