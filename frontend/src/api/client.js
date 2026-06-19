@@ -1,11 +1,19 @@
 import axios from 'axios';
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api/v1';
-const tenantSlug = import.meta.env.VITE_TENANT_SLUG || 'zagreb';
+const tenantSlug = import.meta.env.VITE_TENANT_SLUG || 'subotica';
 
 // Single axios instance: injects the X-Tenant header and the Bearer access token,
 // and transparently refreshes on 401. Components/hooks use this, never raw fetch.
 export const api = axios.create({ baseURL });
+
+// Origin serving static assets (photo uploads live at `<origin>/uploads/...`, outside `/api/v1`).
+const apiOrigin = baseURL.replace(/\/api\/v1\/?$/, '');
+export function assetUrl(p) {
+  if (!p) return p;
+  if (/^https?:\/\//.test(p)) return p;
+  return `${apiOrigin}${p.startsWith('/') ? '' : '/'}${p}`;
+}
 
 let accessToken = null;
 export function setAccessToken(token) { accessToken = token; }

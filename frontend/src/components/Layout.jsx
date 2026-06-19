@@ -1,5 +1,7 @@
 import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import InstallPrompt from './InstallPrompt.jsx';
+import OfflineIndicator from './OfflineIndicator.jsx';
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
@@ -14,6 +16,7 @@ export default function Layout({ children }) {
         <Link to="/" className="brand">GradFix</Link>
         <nav className="nav">
           <NavLink to="/" className={navClass} end>Map</NavLink>
+          <NavLink to="/stats" className={navClass}>Stats</NavLink>
           {user && <NavLink to="/reports/new" className={navClass}>Report</NavLink>}
           {user && <NavLink to="/dashboard" className={navClass}>Dashboard</NavLink>}
         </nav>
@@ -31,7 +34,9 @@ export default function Layout({ children }) {
           )}
         </div>
       </header>
+      <OfflineIndicator />
       <main className="content">{children}</main>
+      <InstallPrompt />
     </div>
   );
 }

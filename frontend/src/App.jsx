@@ -8,6 +8,9 @@ import ForgotPasswordPage from './features/auth/ForgotPasswordPage.jsx';
 import ResetPasswordPage from './features/auth/ResetPasswordPage.jsx';
 import VerifyEmailPage from './features/auth/VerifyEmailPage.jsx';
 import DashboardPage from './features/dashboard/DashboardPage.jsx';
+import NewReportPage from './features/reports/NewReportPage.jsx';
+import ReportDetailPage from './features/reports/ReportDetailPage.jsx';
+import StatsPage from './features/stats/StatsPage.jsx';
 
 export default function App() {
   return (
@@ -20,18 +23,16 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/reports/:id" element={<ReportDetailPage />} />
+        <Route path="/stats" element={<StatsPage />} />
 
-        {/* Authenticated (filled in by later Week 3 milestones) */}
+        {/* Authenticated */}
         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/reports/new" element={
-          <ProtectedRoute requireVerified><Placeholder name="New report" /></ProtectedRoute>} />
+          <ProtectedRoute requireVerified><NewReportPage /></ProtectedRoute>} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
   );
-}
-
-function Placeholder({ name }) {
-  return <div className="page"><div className="card">{name} — coming in the next milestone.</div></div>;
 }

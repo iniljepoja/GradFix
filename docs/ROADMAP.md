@@ -6,7 +6,7 @@ Aligned to the internship program milestones. Each week ends with something demo
 | ---- | ------------------ | ------ |
 | 1    | Setup & Planning   | ✅ done |
 | 2    | Backend core       | ✅ accepted feature-complete |
-| 3    | Frontend — Citizens | 🚧 in progress |
+| 3    | Frontend — Citizens | ✅ done |
 | 4    | Admin panel        | planned |
 | 5    | Integration        | planned |
 | 6    | Polish & Demo      | planned |
@@ -31,12 +31,34 @@ Complete, spec-aligned REST API + schema (see API.md / DATABASE.md).
 - **Public**: report list, detail, history, GeoJSON map (bbox), statistics dashboard.
 - **Deliverable**: the full backend contract the citizen + admin frontends build against. ✅
 
-## Week 3 — Frontend (Citizens)
-- PWA foundations: install/offline polish, auth UI (register/login/verify/reset), profile + history.
-- Report creation flow: photo (mandatory, max 3, client-side compression) → GPS auto-locate + map
-  pin → category/subcategory → description → priority → review/submit.
-- Public map + report detail + upvote; public dashboard view of `/stats`.
-- **Deliverable**: a citizen can register, verify, and file a complete report from the PWA.
+## Week 3 — Frontend (Citizens) ✅
+The citizen-facing PWA, built against the Week 2 API.
+- **PWA foundations**: `vite-plugin-pwa` service worker (auto-update) with basemap-tile caching;
+  generated app icons (`scripts/generate-icons.mjs`); `beforeinstallprompt` install banner and an
+  offline indicator (`InstallPrompt` / `OfflineIndicator` in the layout).
+- **Auth UI**: register, login, email verification, forgot/reset password; session restore via
+  refresh token; verified-gated routes.
+- **Profile + history**: dashboard with profile, gamification badge, and the user's report list.
+- **Report creation flow**: 5-step wizard — photos (mandatory, max 3, client-side canvas
+  compression) → GPS auto-locate + draggable map pin → category/subcategory → title/description/
+  priority → review/submit. Auto-refreshes dashboard + badge on success.
+- **Duplicate prevention**: the wizard's `NearbyReports` panel (Location + Category steps) surfaces
+  nearby existing reports and lets a citizen "support" one ("I have this problem too") instead of
+  filing a duplicate — reuses the map bbox + upvote endpoints, never blocks the flow.
+- **Public map**: report markers refetched per visible bounding box on pan/zoom (`moveend`,
+  debounced); popups link to report detail. CARTO Voyager basemap (Latin labels) + inline-SVG pins.
+- **Report detail + upvote**: photos, description, location, and status-history timeline; optimistic
+  upvote with server reconciliation (logged-out users are routed to login).
+- **Public stats dashboard**: read-only `/stats` view — totals, resolved %, and by-status /
+  by-category breakdowns.
+- **Localization/branding**: defaults to the `subotica` tenant; light-purple theme; demo seed with
+  12 Subotica/Palić reports (varied categories, priorities, statuses, support counts).
+- **Deliverable**: a citizen can register, verify, and file a complete report from the PWA. ✅
+- _Fixes during Week 3_: PWA build (pinned `serialize-javascript` ^6 via `overrides`); `/map/reports`
+  500 (ambiguous `tenant_id` — qualified report columns with `r.`); invisible markers (Leaflet/Vite
+  default-icon URL resolution).
+- _Known follow-ups_: detail page can't show whether the current user already upvoted (no
+  `hasUpvoted` flag on the public endpoint); frontend unit tests deferred to Week 5.
 
 ## Week 4 — Admin panel
 - Admin dashboard UI over `/admin`: report queue (filters/search), status & priority management,

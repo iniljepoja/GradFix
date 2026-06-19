@@ -15,7 +15,8 @@ export default [
       globals: {
         window: 'readonly', document: 'readonly', localStorage: 'readonly',
         console: 'readonly', navigator: 'readonly', FormData: 'readonly',
-        URL: 'readonly', fetch: 'readonly', setTimeout: 'readonly',
+        URL: 'readonly', fetch: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly',
+        createImageBitmap: 'readonly', File: 'readonly',
       },
     },
     settings: { react: { version: 'detect' } },

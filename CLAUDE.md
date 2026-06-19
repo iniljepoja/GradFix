@@ -89,11 +89,21 @@ Controllers throw `ApiError` (`utils/ApiError.js`); the error handler converts t
   for the MVP; if added later, migrate to a `geography(Point)` column and update the map query.
 
 ### Frontend
-- API access goes through `src/api/client.js` (a single axios/fetch wrapper that injects the
-  `Authorization` header, the `X-Tenant` header, and handles 401 → refresh-token retry). Do not call
-  `fetch` directly from components.
-- PWA: `public/manifest.webmanifest` + service worker (via `vite-plugin-pwa`). Map rendering is
-  isolated in `src/features/map/` using react-leaflet.
+- API access goes through `src/api/client.js` (a single axios wrapper that injects the
+  `Authorization` header, the `X-Tenant` header — default tenant slug `subotica` — and handles
+  401 → refresh-token retry). Do not call `fetch` directly from components. `assetUrl()` (same file)
+  resolves photo `/uploads/...` paths against the API origin, since they're served outside `/api/v1`.
+- Server state is fetched with `@tanstack/react-query`; auth/session lives in `context/AuthContext`.
+  Features are grouped under `src/features/` (`auth`, `dashboard`, `reports`, `map`, `stats`).
+- PWA: manifest is configured in `vite.config.js` + service worker (via `vite-plugin-pwa`). Map
+  rendering is isolated in `src/features/map/` using react-leaflet; basemap tiles are CARTO Voyager
+  (`features/map/tiles.js`) — chosen so Serbian place names render in **Latin**, not Cyrillic. The
+  default Leaflet marker is replaced with an inline-SVG pin in `lib/leafletIcon.js` (the bundled-PNG
+  icon URLs 404 under Vite).
+- **Duplicate prevention**: the report wizard's `NearbyReports` panel (Location + Category steps)
+  reuses `GET /map/reports` (bbox) to surface nearby existing reports and lets a citizen "support" one
+  via the existing upvote endpoint instead of filing a duplicate. UI says "affected citizens", never
+  "upvotes" — same denormalized `upvote_count` underneath.
 
 ## Conventions
 

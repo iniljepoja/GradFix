@@ -24,10 +24,12 @@ router.get('/reports',
       }
       const [minLng, minLat, maxLng, maxLat] = parts;
 
-      const where = ['tenant_id = $1', 'longitude BETWEEN $2 AND $3', 'latitude BETWEEN $4 AND $5'];
+      // Columns are qualified with `r.` because this query joins `categories c`, which also has a
+      // `tenant_id` — an unqualified reference is ambiguous and makes Postgres error (42702).
+      const where = ['r.tenant_id = $1', 'r.longitude BETWEEN $2 AND $3', 'r.latitude BETWEEN $4 AND $5'];
       const params = [req.tenant.id, minLng, maxLng, minLat, maxLat];
-      if (req.query.status) { params.push(req.query.status); where.push(`status = $${params.length}`); }
-      if (req.query.categoryId) { params.push(req.query.categoryId); where.push(`category_id = $${params.length}`); }
+      if (req.query.status) { params.push(req.query.status); where.push(`r.status = $${params.length}`); }
+      if (req.query.categoryId) { params.push(req.query.categoryId); where.push(`r.category_id = $${params.length}`); }
 
       const { rows } = await query(
         `SELECT r.id, r.title, r.status, r.upvote_count, r.latitude, r.longitude, c.slug AS category_slug
