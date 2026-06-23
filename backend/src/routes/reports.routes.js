@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validate.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requireCitizen } from '../middleware/auth.js';
 import { photoUpload } from '../middleware/upload.js';
 import * as reports from '../services/report.service.js';
 import * as photos from '../services/photo.service.js';
@@ -32,7 +32,7 @@ router.get('/',
   });
 
 // GET /api/v1/reports/mine — the authenticated user's report history (must precede /:id).
-router.get('/mine', authenticate,
+router.get('/mine', authenticate, requireCitizen,
   validate({
     query: z.object({
       page: z.coerce.number().int().min(1).default(1),
@@ -67,7 +67,7 @@ router.get('/:id/history', async (req, res, next) => {
 // priority. `photoUpload` parses the text fields and the `photos` files; the service enforces
 // email verification, the photo requirement, and automatic category→entity routing.
 const emptyToUndef = (v) => (v === '' ? undefined : v);
-router.post('/', authenticate, photoUpload,
+router.post('/', authenticate, requireCitizen, photoUpload,
   validate({
     body: z.object({
       title: z.string().min(3),
@@ -90,18 +90,18 @@ router.post('/', authenticate, photoUpload,
 // Staff status management lives in the admin router (/api/v1/admin/reports/:id/status).
 
 // POST/DELETE /api/v1/reports/:id/upvote — authenticated, idempotent.
-router.post('/:id/upvote', authenticate, async (req, res, next) => {
+router.post('/:id/upvote', authenticate, requireCitizen, async (req, res, next) => {
   try { res.json({ data: await reports.upvote(req.tenant.id, req.params.id, req.user.id) }); }
   catch (err) { next(err); }
 });
 
-router.delete('/:id/upvote', authenticate, async (req, res, next) => {
+router.delete('/:id/upvote', authenticate, requireCitizen, async (req, res, next) => {
   try { res.json({ data: await reports.removeUpvote(req.tenant.id, req.params.id, req.user.id) }); }
   catch (err) { next(err); }
 });
 
 // POST /api/v1/reports/:id/photos — owner uploads up to 3 compressed photos (multipart, field "photos").
-router.post('/:id/photos', authenticate, photoUpload, async (req, res, next) => {
+router.post('/:id/photos', authenticate, requireCitizen, photoUpload, async (req, res, next) => {
   try {
     const created = await photos.addPhotos(req.tenant.id, req.params.id, req.user.id, req.files);
     res.status(201).json({ data: created });
@@ -109,7 +109,7 @@ router.post('/:id/photos', authenticate, photoUpload, async (req, res, next) => 
 });
 
 // POST /api/v1/reports/:id/rating — reporter rates the resolution (satisfied + optional comment).
-router.post('/:id/rating', authenticate,
+router.post('/:id/rating', authenticate, requireCitizen,
   validate({ body: z.object({ satisfied: z.boolean(), comment: z.string().max(2000).optional() }) }),
   async (req, res, next) => {
     try {

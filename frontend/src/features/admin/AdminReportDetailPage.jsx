@@ -10,6 +10,7 @@ import PriorityPill from '../../components/PriorityPill.jsx';
 import Spinner from '../../components/Spinner.jsx';
 import StatusChangeDialog from './StatusChangeDialog.jsx';
 import AssignDialog from './AssignDialog.jsx';
+import MergeDuplicateDialog from './MergeDuplicateDialog.jsx';
 
 const fmt = (s) => new Date(s).toLocaleString(undefined, {
   day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -18,7 +19,7 @@ const fmt = (s) => new Date(s).toLocaleString(undefined, {
 export default function AdminReportDetailPage() {
   const { id } = useParams();
   const queryClient = useQueryClient();
-  const [dialog, setDialog] = useState(null); // 'status' | 'assign'
+  const [dialog, setDialog] = useState(null); // 'status' | 'assign' | 'merge'
   const [comment, setComment] = useState('');
 
   const reportQuery = useQuery({ queryKey: ['admin-report', id], queryFn: () => adminApi.getReport(id) });
@@ -139,13 +140,17 @@ export default function AdminReportDetailPage() {
           </div>
           <div className="card stack">
             <strong>Duplicate</strong>
-            <button className="btn btn-sm" disabled title="Coming in the next slice">Merge…</button>
+            {r.duplicateOfId && <div className="report-meta">Merged into {r.duplicateOfId}</div>}
+            <button className="btn btn-sm" disabled={r.status === 'closed' || !!r.duplicateOfId} onClick={() => setDialog('merge')}>
+              Merge…
+            </button>
           </div>
         </div>
       </div>
 
       {dialog === 'status' && <StatusChangeDialog report={r} onClose={() => setDialog(null)} />}
       {dialog === 'assign' && <AssignDialog report={r} onClose={() => setDialog(null)} />}
+      {dialog === 'merge' && <MergeDuplicateDialog report={r} onClose={() => setDialog(null)} />}
     </div>
   );
 }

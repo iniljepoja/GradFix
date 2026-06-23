@@ -2,6 +2,11 @@ import { api } from './client.js';
 
 // Admin/staff report management. All routes are tenant-scoped and role-gated server-side.
 
+export async function stats() {
+  const { data } = await api.get('/admin/stats');
+  return data.data;
+}
+
 export async function listReports(params = {}) {
   const { data } = await api.get('/admin/reports', { params });
   return { items: data.data, meta: data.meta };
@@ -25,6 +30,11 @@ export async function updatePriority(id, priority) {
 // entityId omitted → backend falls back to the category's configured route.
 export async function assign(id, entityId) {
   const { data } = await api.patch(`/admin/reports/${id}/assign`, entityId ? { entityId } : {});
+  return data.data;
+}
+
+export async function mergeDuplicate(id, canonicalId) {
+  const { data } = await api.post(`/admin/reports/${id}/merge`, { canonicalId });
   return data.data;
 }
 

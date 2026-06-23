@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import * as reportsApi from '../../api/reports.js';
 import { assetUrl } from '../../api/client.js';
 import { STATUS_LABELS, PRIORITY_LABELS } from '../../lib/reportStatus.js';
+import { isCitizen } from '../../lib/roles.js';
 import { apiErrorMessage } from '../../lib/apiError.js';
 import StatusPill from '../../components/StatusPill.jsx';
 import Spinner from '../../components/Spinner.jsx';
@@ -17,6 +18,7 @@ export default function ReportDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const canSupport = !user || isCitizen(user);
 
   // The detail endpoint is public and doesn't expose whether *this* user has upvoted, so we track
   // the toggle locally; the server returns the authoritative count on every action and reconciles it.
@@ -97,20 +99,26 @@ export default function ReportDetailPage() {
       )}
 
       <div className="card stack">
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <button
-            type="button"
-            className={`btn ${upvoted ? 'btn-primary' : ''}`}
-            onClick={onUpvote}
-            disabled={upvoteMutation.isPending}
-            aria-pressed={upvoted}
-          >
-            ▲ {upvoted ? 'Upvoted' : 'Upvote'} · {report.upvoteCount}
-          </button>
-          {!user && <span className="report-meta">Log in to upvote</span>}
-        </div>
-        {upvoteMutation.isError && (
-          <div className="alert alert-error">{apiErrorMessage(upvoteMutation.error, 'Could not record your vote.')}</div>
+        {canSupport ? (
+          <>
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                type="button"
+                className={`btn ${upvoted ? 'btn-primary' : ''}`}
+                onClick={onUpvote}
+                disabled={upvoteMutation.isPending}
+                aria-pressed={upvoted}
+              >
+                ▲ {upvoted ? 'Upvoted' : 'Upvote'} · {report.upvoteCount}
+              </button>
+              {!user && <span className="report-meta">Log in to upvote</span>}
+            </div>
+            {upvoteMutation.isError && (
+              <div className="alert alert-error">{apiErrorMessage(upvoteMutation.error, 'Could not record your vote.')}</div>
+            )}
+          </>
+        ) : (
+          <p className="report-meta" style={{ margin: 0 }}>Staff accounts can review reports in the admin panel; citizen support is hidden.</p>
         )}
       </div>
 

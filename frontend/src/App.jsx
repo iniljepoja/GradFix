@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout.jsx';
-import ProtectedRoute from './components/ProtectedRoute.jsx';
+import CitizenRoute from './components/CitizenRoute.jsx';
 import MapPage from './features/map/MapPage.jsx';
 import LoginPage from './features/auth/LoginPage.jsx';
 import RegisterPage from './features/auth/RegisterPage.jsx';
@@ -13,6 +13,7 @@ import ReportDetailPage from './features/reports/ReportDetailPage.jsx';
 import StatsPage from './features/stats/StatsPage.jsx';
 import AdminRoute from './components/AdminRoute.jsx';
 import AdminLayout from './features/admin/AdminLayout.jsx';
+import AdminDashboardPage from './features/admin/AdminDashboardPage.jsx';
 import ReportsQueuePage from './features/admin/ReportsQueuePage.jsx';
 import AdminReportDetailPage from './features/admin/AdminReportDetailPage.jsx';
 
@@ -31,13 +32,13 @@ export default function App() {
         <Route path="/stats" element={<StatsPage />} />
 
         {/* Authenticated */}
-        <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+        <Route path="/dashboard" element={<CitizenRoute><DashboardPage /></CitizenRoute>} />
         <Route path="/reports/new" element={
-          <ProtectedRoute requireVerified><NewReportPage /></ProtectedRoute>} />
+          <CitizenRoute requireVerified><NewReportPage /></CitizenRoute>} />
 
         {/* Admin panel (staff only) */}
         <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
-          <Route index element={<Navigate to="/admin/reports" replace />} />
+          <Route index element={<AdminDashboardPage />} />
           <Route path="reports" element={<ReportsQueuePage />} />
           <Route path="reports/:id" element={<AdminReportDetailPage />} />
         </Route>

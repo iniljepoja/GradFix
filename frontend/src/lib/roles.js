@@ -2,6 +2,8 @@
 export const STAFF_ROLES = ['reviewer', 'conductor', 'community_manager', 'tenant_admin', 'super_admin'];
 
 export const isStaff = (user) => !!user && STAFF_ROLES.includes(user.role);
+export const isCitizen = (user) => user?.role === 'citizen';
+export const homeForRole = (user) => (isStaff(user) ? '/admin/reports' : '/dashboard');
 
 // Per-action permissions — mirrors the route-level authorize() gates in admin.routes.js so the UI
 // only offers actions the API will accept. super_admin passes everything.

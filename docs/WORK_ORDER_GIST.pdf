@@ -1,0 +1,269 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R] /Count 4 >>
+endobj
+3 0 obj
+<< /Length 2237 >>
+stream
+BT
+/F1 10 Tf
+13 TL
+50 792 Td
+(GradFix Work Orders - Design Gist) Tj T*
+() Tj T*
+(Main conclusion) Tj T*
+(Work Orders should be a separate operational subsystem, not just a PDF field on reports.) Tj T*
+() Tj T*
+(A report is the citizen-facing issue record.) Tj T*
+(A work order is an operational instruction sent to one responsible entity to perform work.) Tj T*
+() Tj T*
+(Recommended domain rule) Tj T*
+(One report can generate zero, one, or many work orders.) Tj T*
+() Tj T*
+(Why this matters) Tj T*
+(Real city problems often involve multiple services. For example, one traffic issue may need) Tj T*
+(road repair,) Tj T*
+(temporary signs, and later repainting. A single reports.assigned_entity_id field is not) Tj T*
+(enough.) Tj T*
+() Tj T*
+(Core actors) Tj T*
+(- Citizen: creates report, receives updates, may confirm/rate resolution.) Tj T*
+(- Reviewer: accepts reports and verifies completed work.) Tj T*
+(- Conductor: creates, sends, retries, reassigns, cancels, and completes work orders.) Tj T*
+(- Tenant Admin: can override and manage all tenant work-order actions.) Tj T*
+(- Community Manager: can view/communicate, but should not normally create or cancel work) Tj T*
+(orders.) Tj T*
+(- Responsible Entity: receives the work order and performs the work.) Tj T*
+(- System: generates PDFs, sends emails, records delivery failures, and logs events.) Tj T*
+() Tj T*
+(Recommended entities) Tj T*
+(- work_orders) Tj T*
+(- work_order_documents) Tj T*
+(- work_order_deliveries) Tj T*
+(- work_order_events) Tj T*
+(- optional work_order_photos) Tj T*
+(- optional work_order_items) Tj T*
+() Tj T*
+(Recommended relationships) Tj T*
+(- reports 1:N work_orders) Tj T*
+(- responsible_entities 1:N work_orders) Tj T*
+(- work_orders 1:N work_order_documents) Tj T*
+(- work_orders 1:N work_order_deliveries) Tj T*
+(- work_orders 1:N work_order_events) Tj T*
+(- report_photos N:M work_orders, if staff can choose which photos are included) Tj T*
+() Tj T*
+(Recommended work order states) Tj T*
+(- draft) Tj T*
+(- ready_to_send) Tj T*
+(- sending) Tj T*
+(- sent) Tj T*
+(- delivery_failed) Tj T*
+(- acknowledged) Tj T*
+(- in_progress) Tj T*
+(- completed) Tj T*
+(- verified) Tj T*
+(- cancelled) Tj T*
+(- superseded) Tj T*
+(- closed) Tj T*
+() Tj T*
+ET
+endstream
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 11 0 R >> >> /Contents 3 0 R >>
+endobj
+5 0 obj
+<< /Length 2258 >>
+stream
+BT
+/F1 10 Tf
+13 TL
+50 792 Td
+(Minimum MVP states) Tj T*
+(- draft) Tj T*
+(- sent) Tj T*
+(- delivery_failed) Tj T*
+(- in_progress) Tj T*
+(- completed) Tj T*
+(- cancelled) Tj T*
+(- superseded) Tj T*
+() Tj T*
+(Report lifecycle relationship) Tj T*
+(Report status and work order status should not be the same thing.) Tj T*
+() Tj T*
+(Report status is citizen-facing:) Tj T*
+(new -> accepted -> assigned -> in_progress -> resolved -> closed) Tj T*
+() Tj T*
+(Work order status is operational:) Tj T*
+(draft -> sent -> in_progress -> completed -> verified/closed) Tj T*
+() Tj T*
+(A report should become in_progress when at least one required work order is active.) Tj T*
+(A report should become resolved only when required work orders are completed or verified.) Tj T*
+() Tj T*
+(Important rules) Tj T*
+(- Work orders should usually be created manually by Conductor or Tenant Admin after a report) Tj T*
+(is accepted.) Tj T*
+(- Automatic routing can suggest the responsible entity, but should not silently send a work) Tj T*
+(order.) Tj T*
+(- Sent PDFs must be immutable snapshots.) Tj T*
+(- Regenerating a sent PDF should create a new document version.) Tj T*
+(- Reassigning after send should usually supersede/cancel the old work order and create a new) Tj T*
+(one.) Tj T*
+(- Email failure must not lose the work order.) Tj T*
+(- Failed delivery should be visible and retryable.) Tj T*
+(- Closing a report while work is active should be blocked or require Tenant Admin override) Tj T*
+(with reason.) Tj T*
+(- Duplicate merge should require special review if either report already has active/sent) Tj T*
+(work orders.) Tj T*
+() Tj T*
+(Audit events required) Tj T*
+(- work_order.created) Tj T*
+(- work_order.updated) Tj T*
+(- work_order.status_changed) Tj T*
+(- work_order.assigned_entity_changed) Tj T*
+(- work_order.pdf_generated) Tj T*
+(- work_order.pdf_regenerated) Tj T*
+(- work_order.email_queued) Tj T*
+(- work_order.email_sent) Tj T*
+(- work_order.email_failed) Tj T*
+(- work_order.email_retried) Tj T*
+(- work_order.cancelled) Tj T*
+(- work_order.superseded) Tj T*
+(- work_order.completed) Tj T*
+(- work_order.verified) Tj T*
+(- work_order.reopened) Tj T*
+() Tj T*
+(Actions requiring a reason) Tj T*
+(- cancel work order) Tj T*
+(- reassign after send) Tj T*
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 11 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 2463 >>
+stream
+BT
+/F1 10 Tf
+13 TL
+50 792 Td
+(- regenerate after send) Tj T*
+(- supersede work order) Tj T*
+(- reopen completed work) Tj T*
+(- close report while work is active) Tj T*
+(- merge duplicate reports when work orders exist) Tj T*
+() Tj T*
+(Email flow) Tj T*
+(1. Staff reviews work order.) Tj T*
+(2. PDF snapshot is generated.) Tj T*
+(3. Delivery record is created as queued.) Tj T*
+(4. Email job sends PDF or secure PDF link.) Tj T*
+(5. Delivery becomes sent or delivery_failed.) Tj T*
+(6. Failed delivery can be retried.) Tj T*
+(7. Every attempt is audited.) Tj T*
+() Tj T*
+(PDF flow) Tj T*
+(1. Snapshot report details, location, priority, category, selected photos, and responsible) Tj T*
+(entity.) Tj T*
+(2. Generate immutable PDF document.) Tj T*
+(3. Store file key, checksum, generated_by, generated_at.) Tj T*
+(4. Sending uses the current PDF version.) Tj T*
+(5. Regeneration after send creates a new version.) Tj T*
+() Tj T*
+(Security requirements) Tj T*
+(- Every work order must have tenant_id.) Tj T*
+(- Every query must filter by tenant_id.) Tj T*
+(- Tenant-bound users must not access another tenant's work orders.) Tj T*
+(- PDFs should be private or use signed URLs.) Tj T*
+(- Reporter PII should not be included by default.) Tj T*
+(- Email templates must escape user-generated content.) Tj T*
+(- All send/regenerate/cancel actions must be audited.) Tj T*
+() Tj T*
+(Three architecture options) Tj T*
+() Tj T*
+(Option 1: Add PDF fields directly to reports) Tj T*
+(Pros: fastest, easiest demo.) Tj T*
+(Cons: cannot support multiple services, retries, document versions, real audit, or proper) Tj T*
+(cancellation.) Tj T*
+(Verdict: not recommended.) Tj T*
+() Tj T*
+(Option 2: One work_order per report) Tj T*
+(Pros: cleaner than report fields, separate status.) Tj T*
+(Cons: still assumes one service per report and will need redesign later.) Tj T*
+(Verdict: better, but too limiting.) Tj T*
+() Tj T*
+(Option 3: Full Work Order subsystem) Tj T*
+(Pros: supports multiple services, multiple work orders, retries, immutable PDFs, audit,) Tj T*
+(reassignment, and future contractor portal.) Tj T*
+(Cons: more design and implementation work.) Tj T*
+(Verdict: recommended.) Tj T*
+() Tj T*
+(Best recommendation) Tj T*
+(Use Option 3.) Tj T*
+() Tj T*
+(Build Work Orders as first-class operational records with their own lifecycle, documents,) Tj T*
+(deliveries,) Tj T*
+(and audit events. Keep the UI simple at first, but do not compromise the database/domain) Tj T*
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 11 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<< /Length 699 >>
+stream
+BT
+/F1 10 Tf
+13 TL
+50 792 Td
+(model.) Tj T*
+() Tj T*
+(Minimum safe MVP) Tj T*
+(- reports 1:N work_orders) Tj T*
+(- one responsible entity per work order) Tj T*
+(- states: draft, sent, delivery_failed, in_progress, completed, cancelled, superseded) Tj T*
+(- immutable PDF document records) Tj T*
+(- delivery attempt records) Tj T*
+(- audit events for every important action) Tj T*
+(- Conductor/Tenant Admin can create/send/cancel) Tj T*
+(- Reviewer can verify completion) Tj T*
+() Tj T*
+(Final takeaway) Tj T*
+(Do not implement Work Orders as just "generate PDF from report". That would create technical) Tj T*
+(debt and) Tj T*
+(make real municipal workflows hard to support later.) Tj T*
+() Tj T*
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 11 0 R >> >> /Contents 9 0 R >>
+endobj
+11 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000134 00000 n 
+0000002423 00000 n 
+0000002550 00000 n 
+0000004860 00000 n 
+0000004987 00000 n 
+0000007502 00000 n 
+0000007629 00000 n 
+0000008379 00000 n 
+0000008507 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R >>
+startxref
+8578
+%%EOF

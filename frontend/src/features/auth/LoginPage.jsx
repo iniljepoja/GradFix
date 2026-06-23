@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { apiErrorMessage } from '../../lib/apiError.js';
+import { homeForRole, isStaff } from '../../lib/roles.js';
 import Field from '../../components/Field.jsx';
 
 export default function LoginPage() {
@@ -19,8 +20,13 @@ export default function LoginPage() {
     e.preventDefault();
     setError(''); setBusy(true);
     try {
-      await login(email, password);
-      navigate(from, { replace: true });
+      const profile = await login(email, password);
+      const blockedForStaff = from === '/dashboard' || from === '/reports/new';
+      const blockedForCitizen = from.startsWith('/admin');
+      const target = (isStaff(profile) && blockedForStaff) || (!isStaff(profile) && blockedForCitizen)
+        ? homeForRole(profile)
+        : from;
+      navigate(target, { replace: true });
     } catch (err) {
       setError(apiErrorMessage(err, 'Invalid email or password.'));
     } finally { setBusy(false); }

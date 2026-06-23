@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import * as adminApi from '../../api/admin.js';
 import * as categoriesApi from '../../api/categories.js';
@@ -13,10 +13,17 @@ const ageDays = (s) => `${Math.max(0, Math.floor((Date.now() - new Date(s).getTi
 
 export default function ReportsQueuePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [filters, setFilters] = useState({
-    status: '', priority: '', categoryId: '', assignedEntityId: '', q: '', sort: 'recent', page: 1,
+    status: searchParams.get('status') || '',
+    priority: searchParams.get('priority') || '',
+    categoryId: searchParams.get('categoryId') || '',
+    assignedEntityId: searchParams.get('assignedEntityId') || '',
+    q: searchParams.get('q') || '',
+    sort: searchParams.get('sort') || 'recent',
+    page: 1,
   });
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(searchParams.get('q') || '');
 
   const set = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.value, page: 1 }));
 

@@ -154,9 +154,11 @@ export async function getProfile(userId) {
   );
   if (!rows[0]) throw ApiError.notFound('User not found');
   const u = rows[0];
-  const count = await reporterReportCount(userId);
+  const badges = u.role === 'citizen'
+    ? await reporterReportCount(userId).then((count) => badgeForCount(count))
+    : { reportCount: 0, badge: null, nextBadge: null };
   return {
     id: u.id, email: u.email, fullName: u.full_name, role: u.role,
-    isEmailVerified: u.is_email_verified, ...badgeForCount(count),
+    isEmailVerified: u.is_email_verified, ...badges,
   };
 }

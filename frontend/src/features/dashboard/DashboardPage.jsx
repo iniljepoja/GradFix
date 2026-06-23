@@ -10,6 +10,7 @@ const fmtDate = (s) => new Date(s).toLocaleDateString(undefined, { day: 'numeric
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const isCitizen = user.role === 'citizen';
   const { data, isLoading, isError } = useQuery({
     queryKey: ['my-reports'],
     queryFn: () => reportsApi.listMine({ limit: 50 }),
@@ -38,9 +39,11 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div style={{ flex: '1 1 260px' }}>
-          <BadgeCard reportCount={user.reportCount} badge={user.badge} nextBadge={user.nextBadge} />
-        </div>
+        {isCitizen && (
+          <div style={{ flex: '1 1 260px' }}>
+            <BadgeCard reportCount={user.reportCount} badge={user.badge} nextBadge={user.nextBadge} />
+          </div>
+        )}
       </div>
 
       <div className="card stack">

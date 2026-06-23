@@ -158,6 +158,9 @@ textarea.input { min-height: 96px; resize: vertical; }
 .admin-navlink:hover { background: var(--card); }
 .admin-navlink-active { background: #efeafb; color: var(--brand-dark); font-weight: 700; }
 .admin-content { flex: 1; min-width: 0; }
+.admin-kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)); gap: 12px; }
+.admin-status-grid { display: grid; grid-template-columns: repeat(6, minmax(110px, 1fr)); gap: 10px; }
+.admin-status-card { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; }
 
 .admin-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .admin-filters .input { max-width: 190px; }
@@ -172,10 +175,13 @@ textarea.input { min-height: 96px; resize: vertical; }
 /* Modal */
 .modal-overlay { position: fixed; inset: 0; background: rgba(33, 27, 51, 0.45); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 2000; }
 .modal { width: 100%; max-width: 460px; max-height: 90vh; overflow: auto; }
+.merge-candidate { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+.merge-candidate:hover { background: #faf8fe; }
 
 @media (max-width: 720px) {
   .admin-shell { flex-direction: column; padding: 16px; }
   .admin-sidebar { position: static; flex-direction: row; flex: none; }
+  .admin-kpi-grid, .admin-status-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
 }
 
 /* Status history timeline */
