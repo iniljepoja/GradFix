@@ -21,35 +21,45 @@ const bboxOf = (b) =>
 
 export default function MapPage() {
   const [features, setFeatures] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
   const debounce = useRef();
 
   const onBounds = useCallback((bounds) => {
     // Debounce so a continuous drag/zoom issues a single request when it settles.
     clearTimeout(debounce.current);
     debounce.current = setTimeout(() => {
+      setIsLoading(true);
       api.get('/map/reports', { params: { bbox: bboxOf(bounds) } })
         .then((res) => setFeatures(res.data.features || []))
-        .catch(() => { /* keep the last good set on transient errors */ });
+        .catch(() => { /* keep the last good set on transient errors */ })
+        .finally(() => setIsLoading(false));
     }, 300);
   }, []);
 
   useEffect(() => () => clearTimeout(debounce.current), []);
 
   return (
-    <MapContainer center={SUBOTICA} zoom={13} style={{ height: 'calc(100vh - 49px)' }}>
-      <TileLayer attribution={TILE_ATTRIBUTION} url={TILE_URL} subdomains={TILE_SUBDOMAINS} />
-      <BoundsWatcher onBounds={onBounds} />
-      {features.map((f) => (
-        <Marker key={f.properties.id} position={[f.geometry.coordinates[1], f.geometry.coordinates[0]]}>
-          <Popup>
-            <strong>{f.properties.title}</strong>
-            <br />
-            Status: {f.properties.status} · ▲ {f.properties.upvoteCount}
-            <br />
-            <Link to={`/reports/${f.properties.id}`}>View details →</Link>
-          </Popup>
-        </Marker>
-      ))}
-    </MapContainer>
+    <div style={{ position: 'relative', height: 'calc(100vh - 49px)' }}>
+      <MapContainer center={SUBOTICA} zoom={13} style={{ height: '100%' }}>
+        <TileLayer attribution={TILE_ATTRIBUTION} url={TILE_URL} subdomains={TILE_SUBDOMAINS} />
+        <BoundsWatcher onBounds={onBounds} />
+        {features.map((f) => (
+          <Marker key={f.properties.id} position={[f.geometry.coordinates[1], f.geometry.coordinates[0]]}>
+            <Popup>
+              <strong>{f.properties.title}</strong>
+              <br />
+              Status: {f.properties.status} · ▲ {f.properties.upvoteCount}
+              <br />
+              <Link to={`/reports/${f.properties.id}`}>View details →</Link>
+            </Popup>
+          </Marker>
+        ))}
+      </MapContainer>
+      {isLoading && (
+        <div className="card" style={{ position: 'absolute', top: 12, left: 12, zIndex: 500, padding: '8px 12px' }}>
+          Loading reports…
+        </div>
+      )}
+    </div>
   );
 }
