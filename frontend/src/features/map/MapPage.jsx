@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { api } from '../../api/client.js';
+import * as categoriesApi from '../../api/categories.js';
 import { STATUS_LABELS } from '../../lib/reportStatus.js';
 import { TILE_URL, TILE_ATTRIBUTION, TILE_SUBDOMAINS } from './tiles.js';
 import '../../lib/leafletIcon.js';
@@ -46,7 +47,18 @@ export default function MapPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [categories, setCategories] = useState([]);
   const debounce = useRef();
+
+  useEffect(() => {
+    let active = true;
+    categoriesApi.list()
+      .then((items) => { if (active) setCategories(items); })
+      .catch(() => { if (active) setCategories([]); });
+    return () => { active = false; };
+  }, []);
 
   const onBounds = useCallback((bounds) => {
     // Debounce so a continuous drag/zoom issues a single request when it settles.
@@ -54,12 +66,16 @@ export default function MapPage() {
     debounce.current = setTimeout(() => {
       setIsLoading(true);
       setError('');
-      api.get('/map/reports', { params: { bbox: bboxOf(bounds) } })
+      api.get('/map/reports', { params: {
+        bbox: bboxOf(bounds),
+        status: statusFilter || undefined,
+        categoryId: categoryFilter || undefined,
+      } })
         .then((res) => setFeatures(res.data.features || []))
         .catch(() => setError('Could not refresh reports. Showing the last loaded results.'))
         .finally(() => { setHasLoaded(true); setIsLoading(false); });
     }, 300);
-  }, []);
+  }, [categoryFilter, statusFilter]);
 
   useEffect(() => () => clearTimeout(debounce.current), []);
 
@@ -96,6 +112,19 @@ export default function MapPage() {
           No reports in this area.
         </div>
       )}
+      <div className="card" style={{ position: 'absolute', top: 12, right: 12, zIndex: 500, padding: 12, width: 220 }}>
+        <strong style={{ display: 'block', marginBottom: 8 }}>Map filters</strong>
+        <div className="stack" style={{ gap: 8 }}>
+          <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="">All statuses</option>
+            {STATUS_ORDER.map((status) => <option key={status} value={status}>{STATUS_LABELS[status]}</option>)}
+          </select>
+          <select className="input" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+            <option value="">All categories</option>
+            {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+          </select>
+        </div>
+      </div>
       <div className="card" style={{ position: 'absolute', right: 12, bottom: 24, zIndex: 500, padding: '10px 12px' }}>
         <strong style={{ display: 'block', marginBottom: 6 }}>Status</strong>
         <div className="stack" style={{ gap: 4 }}>
