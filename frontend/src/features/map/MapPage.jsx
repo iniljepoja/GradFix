@@ -22,6 +22,7 @@ const bboxOf = (b) =>
 export default function MapPage() {
   const [features, setFeatures] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
   const debounce = useRef();
 
   const onBounds = useCallback((bounds) => {
@@ -29,9 +30,10 @@ export default function MapPage() {
     clearTimeout(debounce.current);
     debounce.current = setTimeout(() => {
       setIsLoading(true);
+      setError('');
       api.get('/map/reports', { params: { bbox: bboxOf(bounds) } })
         .then((res) => setFeatures(res.data.features || []))
-        .catch(() => { /* keep the last good set on transient errors */ })
+        .catch(() => setError('Could not refresh reports. Showing the last loaded results.'))
         .finally(() => setIsLoading(false));
     }, 300);
   }, []);
@@ -58,6 +60,11 @@ export default function MapPage() {
       {isLoading && (
         <div className="card" style={{ position: 'absolute', top: 12, left: 12, zIndex: 500, padding: '8px 12px' }}>
           Loading reports…
+        </div>
+      )}
+      {error && !isLoading && (
+        <div className="alert alert-error" style={{ position: 'absolute', top: 12, left: 12, zIndex: 500 }}>
+          {error}
         </div>
       )}
     </div>
