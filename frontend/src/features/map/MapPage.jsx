@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { api } from '../../api/client.js';
 import * as categoriesApi from '../../api/categories.js';
@@ -37,6 +37,30 @@ function BoundsWatcher({ onBounds }) {
   const map = useMapEvents({ moveend: () => onBounds(map.getBounds()) });
   useEffect(() => { onBounds(map.getBounds()); }, [map, onBounds]);
   return null;
+}
+
+function ReportMarker({ feature }) {
+  const map = useMap();
+  const position = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
+  const status = feature.properties.status;
+
+  return (
+    <Marker
+      position={position}
+      icon={markerIcon(status)}
+      eventHandlers={{
+        click: () => map.flyTo(position, Math.min(Math.max(map.getZoom() + 2, 16), 18), { duration: 0.45 }),
+      }}
+    >
+      <Popup>
+        <strong>{feature.properties.title}</strong>
+        <br />
+        Status: {STATUS_LABELS[status] || status} · ▲ {feature.properties.upvoteCount}
+        <br />
+        <Link to={`/reports/${feature.properties.id}`}>View details →</Link>
+      </Popup>
+    </Marker>
+  );
 }
 
 const bboxOf = (b) =>
@@ -84,18 +108,7 @@ export default function MapPage() {
       <MapContainer center={SUBOTICA} zoom={13} style={{ height: '100%' }}>
         <TileLayer attribution={TILE_ATTRIBUTION} url={TILE_URL} subdomains={TILE_SUBDOMAINS} />
         <BoundsWatcher onBounds={onBounds} />
-        {features.map((f) => (
-          <Marker key={f.properties.id} position={[f.geometry.coordinates[1], f.geometry.coordinates[0]]}
-            icon={markerIcon(f.properties.status)}>
-            <Popup>
-              <strong>{f.properties.title}</strong>
-              <br />
-              Status: {STATUS_LABELS[f.properties.status] || f.properties.status} · ▲ {f.properties.upvoteCount}
-              <br />
-              <Link to={`/reports/${f.properties.id}`}>View details →</Link>
-            </Popup>
-          </Marker>
-        ))}
+        {features.map((f) => <ReportMarker key={f.properties.id} feature={f} />)}
       </MapContainer>
       {isLoading && (
         <div className="card" style={{ position: 'absolute', top: 12, left: 12, zIndex: 500, padding: '8px 12px' }}>
