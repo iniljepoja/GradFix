@@ -5,7 +5,7 @@ import '../../lib/leafletIcon.js';
 
 // Interactive location picker: drop a pin by tapping the map, drag it to fine-tune, or jump to the
 // device's GPS position. `value` is { lat, lng } | null; `onChange` receives the same shape.
-const DEFAULT_CENTER = [45.8131, 15.9776]; // Zagreb
+const DEFAULT_CENTER = [46.1005, 19.6651]; // Subotica demo tenant
 
 function ClickToPlace({ onChange }) {
   useMapEvents({ click: (e) => onChange({ lat: e.latlng.lat, lng: e.latlng.lng }) });
