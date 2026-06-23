@@ -23,6 +23,7 @@ export default function MapPage() {
   const [features, setFeatures] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [hasLoaded, setHasLoaded] = useState(false);
   const debounce = useRef();
 
   const onBounds = useCallback((bounds) => {
@@ -34,7 +35,7 @@ export default function MapPage() {
       api.get('/map/reports', { params: { bbox: bboxOf(bounds) } })
         .then((res) => setFeatures(res.data.features || []))
         .catch(() => setError('Could not refresh reports. Showing the last loaded results.'))
-        .finally(() => setIsLoading(false));
+        .finally(() => { setHasLoaded(true); setIsLoading(false); });
     }, 300);
   }, []);
 
@@ -65,6 +66,11 @@ export default function MapPage() {
       {error && !isLoading && (
         <div className="alert alert-error" style={{ position: 'absolute', top: 12, left: 12, zIndex: 500 }}>
           {error}
+        </div>
+      )}
+      {hasLoaded && !isLoading && !error && features.length === 0 && (
+        <div className="card" style={{ position: 'absolute', top: 12, left: 12, zIndex: 500, padding: '10px 14px' }}>
+          No reports in this area.
         </div>
       )}
     </div>
