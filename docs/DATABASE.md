@@ -199,6 +199,22 @@ CREATE TABLE report_status_history (
 CREATE INDEX idx_status_history_report ON report_status_history(report_id);
 ```
 
+### report_assignment_history
+Assignment/reassignment audit trail. Status history records lifecycle changes; this table records who
+changed the responsible entity and when.
+```sql
+CREATE TABLE report_assignment_history (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  report_id   UUID NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+  changed_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+  from_responsible_entity_id UUID REFERENCES responsible_entities(id) ON DELETE SET NULL,
+  to_responsible_entity_id   UUID REFERENCES responsible_entities(id) ON DELETE SET NULL,
+  note        TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
 ### upvotes
 ```sql
 CREATE TABLE upvotes (
@@ -246,6 +262,43 @@ CREATE TABLE report_comments (
   is_internal BOOLEAN NOT NULL DEFAULT TRUE,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+```
+
+### work_orders
+Operational instructions sent to responsible entities. A report can have many work orders; each work
+order has its own lifecycle separate from `reports.status`.
+Normal operations cancel mistaken work orders instead of deleting them. The application blocks more
+than one active work order for the same report and responsible entity.
+```sql
+CREATE TYPE work_order_status AS ENUM
+  ('draft', 'sent', 'delivery_failed', 'in_progress', 'completed', 'cancelled', 'superseded');
+
+CREATE TABLE work_orders (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id             UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  report_id             UUID NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+  responsible_entity_id UUID NOT NULL REFERENCES responsible_entities(id),
+  created_by            UUID REFERENCES users(id) ON DELETE SET NULL,
+  title                 TEXT NOT NULL,
+  description           TEXT,
+  status                work_order_status NOT NULL DEFAULT 'draft',
+  due_at                TIMESTAMPTZ,
+  sent_at               TIMESTAMPTZ,
+  completed_at          TIMESTAMPTZ,
+  cancelled_at          TIMESTAMPTZ,
+  superseded_by_id      UUID REFERENCES work_orders(id) ON DELETE SET NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+### work_order_documents / deliveries / events
+Documents are immutable generated snapshots; deliveries track email/send attempts; events audit every
+important work-order action.
+```sql
+CREATE TABLE work_order_documents (... tenant_id, work_order_id, version, storage_key, checksum, snapshot ...);
+CREATE TABLE work_order_deliveries (... tenant_id, work_order_id, document_id, channel, recipient_email, status ...);
+CREATE TABLE work_order_events (... tenant_id, work_order_id, actor_id, event_type, from_status, to_status, note ...);
 ```
 
 ### push_subscriptions

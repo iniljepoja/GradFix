@@ -5,6 +5,8 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import * as admin from '../services/admin.service.js';
 import * as entities from '../services/entity.service.js';
 import * as categories from '../services/category.service.js';
+import * as workOrders from '../services/work-order.service.js';
+import * as platform from '../services/platform.service.js';
 import { changeStatus } from '../services/report.service.js';
 import { adminStats } from '../services/stats.service.js';
 
@@ -23,13 +25,62 @@ const tenantAdmin = authorize('tenant_admin'); // tenant configuration; super_ad
 const canReview = authorize('reviewer', 'tenant_admin');                  // priority, merge
 const canChangeStatus = authorize('reviewer', 'conductor', 'tenant_admin');
 const canAssign = authorize('conductor', 'tenant_admin');
+const canManageWorkOrders = authorize('conductor', 'tenant_admin');
+const superAdmin = authorize('super_admin');
 
 const STATUS = z.enum(['accepted', 'assigned', 'in_progress', 'resolved', 'closed']);
+const WORK_ORDER_STATUS = z.enum(workOrders.WORK_ORDER_STATUSES);
 const PRIORITY = z.enum(['low', 'medium', 'high', 'critical']);
-const ENTITY_TYPE = z.enum(['company', 'ngo', 'informal_group', 'department']);
+const ENTITY_TYPE = z.enum(entities.ENTITY_TYPES);
 const ASSIGNABLE_ROLE = z.enum(['citizen', 'reviewer', 'conductor', 'community_manager', 'tenant_admin']);
+const UUID = z.string().uuid();
 
 const wrap = (fn) => async (req, res, next) => { try { await fn(req, res); } catch (err) { next(err); } };
+
+// ── Main admin / platform-wide views ────────────────────────────────────────
+router.get('/platform/tenants', superAdmin, wrap(async (req, res) => {
+  res.json({ data: await platform.listTenants() });
+}));
+
+router.post('/platform/tenants', superAdmin,
+  validate({ body: z.object({
+    name: z.string().min(1), slug: z.string().min(2).regex(/^[a-z0-9-]+$/),
+    centerLat: z.number().optional(), centerLng: z.number().optional(),
+  }) }),
+  wrap(async (req, res) => { res.status(201).json({ data: await platform.createTenant(req.body) }); }));
+
+router.patch('/platform/tenants/:id', superAdmin,
+  validate({ body: z.object({
+    name: z.string().min(1).optional(), centerLat: z.number().nullable().optional(),
+    centerLng: z.number().nullable().optional(), isActive: z.boolean().optional(),
+  }) }),
+  wrap(async (req, res) => { res.json({ data: await platform.updateTenant(req.params.id, req.body) }); }));
+
+router.get('/platform/reports', superAdmin,
+  validate({ query: z.object({ tenantId: UUID.optional(), page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(100).default(50) }) }),
+  wrap(async (req, res) => {
+    const { items, total, page, limit } = await platform.listReports(req.query);
+    res.json({ data: items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+  }));
+
+router.get('/platform/work-orders', superAdmin,
+  validate({ query: z.object({ tenantId: UUID.optional(), page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(100).default(50) }) }),
+  wrap(async (req, res) => {
+    const { items, total, page, limit } = await platform.listWorkOrders(req.query);
+    res.json({ data: items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+  }));
+
+router.get('/platform/entities', superAdmin,
+  validate({ query: z.object({ tenantId: UUID.optional() }) }),
+  wrap(async (req, res) => { res.json({ data: await platform.listEntities(req.query) }); }));
+
+router.get('/platform/tenant-admins', superAdmin,
+  validate({ query: z.object({ tenantId: UUID.optional() }) }),
+  wrap(async (req, res) => { res.json({ data: await platform.listTenantAdmins(req.query.tenantId) }); }));
+
+router.post('/platform/tenant-admins', superAdmin,
+  validate({ body: z.object({ tenantId: UUID, email: z.string().email(), password: z.string().min(8), fullName: z.string().min(1) }) }),
+  wrap(async (req, res) => { res.status(201).json({ data: await platform.createTenantAdmin(req.body) }); }));
 
 // ── Dashboard statistics ────────────────────────────────────────────────────
 router.get('/stats', wrap(async (req, res) => {
@@ -60,7 +111,7 @@ router.get('/reports/:id',
   wrap(async (req, res) => { res.json({ data: await admin.getReport(req.tenant.id, req.params.id) }); }));
 
 router.patch('/reports/:id/status', canChangeStatus,
-  validate({ body: z.object({ toStatus: STATUS, note: z.string().optional() }) }),
+  validate({ body: z.object({ toStatus: STATUS, note: z.string().trim().min(1).max(2000).optional() }) }),
   wrap(async (req, res) => {
     res.json({ data: await changeStatus(req.tenant.id, req.params.id, req.user.id, req.body) });
   }));
@@ -79,10 +130,14 @@ router.patch('/reports/:id/assign', canAssign,
   }));
 
 router.post('/reports/:id/merge', canReview,
-  validate({ body: z.object({ canonicalId: z.string().uuid() }) }),
+  validate({ body: z.object({ canonicalId: z.string().uuid(), note: z.string().trim().min(1).max(2000) }) }),
   wrap(async (req, res) => {
-    res.json({ data: await admin.mergeDuplicate(req.tenant.id, req.params.id, req.body.canonicalId, req.user.id) });
+    res.json({ data: await admin.mergeDuplicate(req.tenant.id, req.params.id, req.body.canonicalId, req.user.id, req.body.note) });
   }));
+
+router.get('/reports/:id/assignment-history', wrap(async (req, res) => {
+  res.json({ data: await admin.listAssignmentHistory(req.tenant.id, req.params.id) });
+}));
 
 router.get('/reports/:id/comments',
   wrap(async (req, res) => { res.json({ data: await admin.listComments(req.tenant.id, req.params.id) }); }));
@@ -93,6 +148,46 @@ router.post('/reports/:id/comments',
     res.status(201).json({ data: await admin.addComment(req.tenant.id, req.params.id, req.user.id, req.body) });
   }));
 
+// ── Work orders ─────────────────────────────────────────────────────────────
+router.get('/work-orders',
+  validate({ query: z.object({
+    status: WORK_ORDER_STATUS.optional(),
+    reportId: UUID.optional(),
+    assignedEntityId: UUID.optional(),
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+  }) }),
+  wrap(async (req, res) => {
+    const { items, total, page, limit } = await workOrders.list(req.tenant.id, req.query);
+    res.json({ data: items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+  }));
+
+router.get('/reports/:id/work-orders', wrap(async (req, res) => {
+  res.json({ data: await workOrders.listForReport(req.tenant.id, req.params.id) });
+}));
+
+router.post('/reports/:id/work-orders', canManageWorkOrders,
+  validate({ body: z.object({
+    entityId: z.string().uuid().optional(),
+    title: z.string().min(3).max(200).optional(),
+    description: z.string().max(4000).optional(),
+    dueAt: z.string().datetime().optional(),
+  }) }),
+  wrap(async (req, res) => {
+    const data = await workOrders.createWorkOrder(req.tenant.id, req.params.id, req.user.id, req.body);
+    res.status(201).json({ data });
+  }));
+
+router.get('/work-orders/:id', wrap(async (req, res) => {
+  res.json({ data: await workOrders.getById(req.tenant.id, req.params.id) });
+}));
+
+router.patch('/work-orders/:id/status', canManageWorkOrders,
+  validate({ body: z.object({ toStatus: WORK_ORDER_STATUS, note: z.string().trim().min(1).max(2000).optional() }) }),
+  wrap(async (req, res) => {
+    res.json({ data: await workOrders.changeWorkOrderStatus(req.tenant.id, req.params.id, req.user.id, req.body) });
+  }));
+
 // ── Responsible entities & routing ──────────────────────────────────────────
 router.get('/entities', wrap(async (req, res) => {
   res.json({ data: await entities.listEntities(req.tenant.id) });
@@ -101,14 +196,15 @@ router.get('/entities', wrap(async (req, res) => {
 router.post('/entities', tenantAdmin,
   validate({ body: z.object({
     name: z.string().min(1), type: ENTITY_TYPE.default('company'),
-    email: z.string().email().optional(), phone: z.string().optional(),
+    email: z.string().email().optional(), phone: z.string().max(60).optional(), notes: z.string().max(2000).optional(),
   }) }),
   wrap(async (req, res) => { res.status(201).json({ data: await entities.createEntity(req.tenant.id, req.body) }); }));
 
 router.patch('/entities/:id', tenantAdmin,
   validate({ body: z.object({
     name: z.string().min(1).optional(), type: ENTITY_TYPE.optional(),
-    email: z.string().email().optional(), phone: z.string().optional(), isActive: z.boolean().optional(),
+    email: z.string().email().nullable().optional(), phone: z.string().max(60).nullable().optional(),
+    notes: z.string().max(2000).nullable().optional(), isActive: z.boolean().optional(),
   }) }),
   wrap(async (req, res) => { res.json({ data: await entities.updateEntity(req.tenant.id, req.params.id, req.body) }); }));
 

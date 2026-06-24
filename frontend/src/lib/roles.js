@@ -11,6 +11,7 @@ const PERMISSIONS = {
   status: ['reviewer', 'conductor', 'tenant_admin'],
   priority: ['reviewer', 'tenant_admin'],
   assign: ['conductor', 'tenant_admin'],
+  workOrder: ['conductor', 'tenant_admin'],
   merge: ['reviewer', 'tenant_admin'],
   comment: ['reviewer', 'conductor', 'community_manager', 'tenant_admin'],
   config: ['tenant_admin'],

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as adminApi from '../../api/admin.js';
 import { apiErrorMessage } from '../../lib/apiError.js';
+import { entityTypeLabel } from '../../lib/entities.js';
 import Modal from '../../components/Modal.jsx';
 
 // Assignment workflow: pick a responsible entity (or fall back to the category's auto-route).
@@ -19,6 +20,7 @@ export default function AssignDialog({ report, onClose }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-report', report.id] });
       queryClient.invalidateQueries({ queryKey: ['report-history', report.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-assignment-history', report.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-reports'] });
       onClose();
     },
@@ -44,7 +46,7 @@ export default function AssignDialog({ report, onClose }) {
             <select id="assign-entity" className="input" value={entityId} onChange={(e) => setEntityId(e.target.value)}>
               <option value="">— Use category route —</option>
               {active.map((e) => (
-                <option key={e.id} value={e.id}>{e.name} · {e.type.replace('_', ' ')}</option>
+                <option key={e.id} value={e.id}>{e.name} · {entityTypeLabel(e.type)}</option>
               ))}
             </select>
           </div>

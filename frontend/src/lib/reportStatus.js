@@ -21,3 +21,7 @@ export const STATUS_TRANSITIONS = {
 };
 
 export const nextStatuses = (status) => STATUS_TRANSITIONS[status] || [];
+
+export const requiresStatusReason = (from, to) => to === 'closed' || (from === 'resolved' && to === 'in_progress');
+
+export const requiresStartedWorkOrder = (from, to) => to === 'in_progress' && from !== 'resolved';

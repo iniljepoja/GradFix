@@ -1,27 +1,29 @@
 import { query } from '../config/db.js';
 import { ApiError } from '../utils/ApiError.js';
 
+export const ENTITY_TYPES = ['municipal_department', 'utility_company', 'contractor', 'ngo', 'other'];
+
 export async function listEntities(tenantId) {
   const { rows } = await query(
-    `SELECT id, name, type, email, phone, is_active AS "isActive"
+    `SELECT id, name, type, email, phone, notes, is_active AS "isActive"
      FROM responsible_entities WHERE tenant_id = $1 ORDER BY name`,
     [tenantId]);
   return rows;
 }
 
-export async function createEntity(tenantId, { name, type = 'company', email, phone }) {
+export async function createEntity(tenantId, { name, type = 'municipal_department', email, phone, notes }) {
   const { rows } = await query(
-    `INSERT INTO responsible_entities (tenant_id, name, type, email, phone)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING id, name, type, email, phone, is_active AS "isActive"`,
-    [tenantId, name, type, email ?? null, phone ?? null]);
+    `INSERT INTO responsible_entities (tenant_id, name, type, email, phone, notes)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, name, type, email, phone, notes, is_active AS "isActive"`,
+    [tenantId, name, type, email ?? null, phone ?? null, notes ?? null]);
   return rows[0];
 }
 
 export async function updateEntity(tenantId, id, fields) {
   const sets = [];
   const params = [];
-  for (const col of ['name', 'type', 'email', 'phone', 'is_active']) {
+  for (const col of ['name', 'type', 'email', 'phone', 'notes', 'is_active']) {
     const key = col === 'is_active' ? 'isActive' : col;
     if (fields[key] !== undefined) { params.push(fields[key]); sets.push(`${col} = $${params.length}`); }
   }
@@ -30,7 +32,7 @@ export async function updateEntity(tenantId, id, fields) {
   const { rows } = await query(
     `UPDATE responsible_entities SET ${sets.join(', ')}
      WHERE id = $${params.length - 1} AND tenant_id = $${params.length}
-     RETURNING id, name, type, email, phone, is_active AS "isActive"`,
+     RETURNING id, name, type, email, phone, notes, is_active AS "isActive"`,
     params);
   if (!rows[0]) throw ApiError.notFound('Entity not found');
   return rows[0];
@@ -42,7 +44,7 @@ export async function setCategoryRoute(tenantId, categoryId, entityId) {
     'SELECT id FROM categories WHERE id = $1 AND tenant_id = $2', [categoryId, tenantId]);
   if (!cat[0]) throw ApiError.notFound('Category not found');
   const { rows: ent } = await query(
-    'SELECT id FROM responsible_entities WHERE id = $1 AND tenant_id = $2', [entityId, tenantId]);
+    'SELECT id FROM responsible_entities WHERE id = $1 AND tenant_id = $2 AND is_active = TRUE', [entityId, tenantId]);
   if (!ent[0]) throw ApiError.badRequest('Unknown responsible entity for this tenant');
 
   const { rows } = await query(

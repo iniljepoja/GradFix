@@ -11,6 +11,7 @@ export default function MergeDuplicateDialog({ report, onClose }) {
   const [search, setSearch] = useState('');
   const [submittedSearch, setSubmittedSearch] = useState('');
   const [canonicalId, setCanonicalId] = useState('');
+  const [note, setNote] = useState('');
 
   const candidatesQuery = useQuery({
     queryKey: ['admin-merge-candidates', report.id, report.categoryId, submittedSearch],
@@ -26,7 +27,7 @@ export default function MergeDuplicateDialog({ report, onClose }) {
     .filter((r) => r.id !== report.id && !r.duplicateOfId);
 
   const mutation = useMutation({
-    mutationFn: () => adminApi.mergeDuplicate(report.id, canonicalId),
+    mutationFn: () => adminApi.mergeDuplicate(report.id, canonicalId, note.trim()),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-report', report.id] });
       queryClient.invalidateQueries({ queryKey: ['report-history', report.id] });
@@ -39,7 +40,14 @@ export default function MergeDuplicateDialog({ report, onClose }) {
     ? 'Closed reports can’t be merged again.'
     : report.duplicateOfId
       ? 'This report is already marked as a duplicate.'
+      : ['assigned', 'in_progress'].includes(report.status)
+        ? 'Reports with active assignment can’t be merged.'
+        : report.activeWorkOrderCount > 0
+          ? 'Reports with active Work Orders can’t be merged.'
       : null;
+
+  const candidateBlocked = (candidate) => ['assigned', 'in_progress'].includes(candidate.status)
+    || candidate.activeWorkOrderCount > 0;
 
   return (
     <Modal title="Merge duplicate" onClose={onClose}>
@@ -80,12 +88,14 @@ export default function MergeDuplicateDialog({ report, onClose }) {
                     name="canonicalId"
                     value={candidate.id}
                     checked={canonicalId === candidate.id}
+                    disabled={candidateBlocked(candidate)}
                     onChange={() => setCanonicalId(candidate.id)}
                   />
                   <span className="stack" style={{ gap: 4 }}>
                     <strong>{candidate.title}</strong>
                     <span className="report-meta">
                       <StatusPill status={candidate.status} /> · {candidate.upvoteCount} affected · {new Date(candidate.createdAt).toLocaleDateString()}
+                      {candidateBlocked(candidate) ? ' · blocked: active assignment/work orders' : ''}
                     </span>
                   </span>
                 </label>
@@ -93,13 +103,18 @@ export default function MergeDuplicateDialog({ report, onClose }) {
             </div>
           )}
 
+          <div className="field">
+            <label htmlFor="merge-note">Merge reason (required)</label>
+            <textarea id="merge-note" className="input" rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
+          </div>
+
           {mutation.isError && <div className="alert alert-error">{apiErrorMessage(mutation.error)}</div>}
           <div className="row" style={{ justifyContent: 'flex-end' }}>
             <button type="button" className="btn" onClick={onClose}>Cancel</button>
             <button
               type="button"
               className="btn btn-primary"
-              disabled={!canonicalId || mutation.isPending}
+              disabled={!canonicalId || !note.trim() || mutation.isPending}
               onClick={() => mutation.mutate()}
             >
               {mutation.isPending ? 'Merging…' : 'Merge'}

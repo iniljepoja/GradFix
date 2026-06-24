@@ -7,6 +7,7 @@ import { pool } from '../config/db.js';
 export const DEMO = {
   tenant: { name: 'Grad Subotica', slug: 'subotica', centerLat: 46.1005, centerLng: 19.6651 },
   admin: { email: 'admin@gradfix.app', password: 'Admin123!', fullName: 'Demo Admin' },
+  superAdmin: { email: 'super@gradfix.app', password: 'Super123!', fullName: 'Demo Main Admin' },
   citizen: { email: 'citizen@gradfix.app', password: 'Citizen123!', fullName: 'Demo Citizen' },
   // One demo user per staff role, so role permission separation can be exercised end-to-end.
   staff: [
@@ -29,13 +30,13 @@ export const DEMO = {
   ],
   // Responsible entities and which category routes to them by default.
   entities: [
-    { name: 'City Public Utilities', type: 'company', email: 'utilities@example.com',
+    { name: 'City Public Utilities', type: 'utility_company', email: 'utilities@example.com',
       routes: ['urban-furniture', 'public-lighting'] },
-    { name: 'Roads & Traffic Department', type: 'department', email: 'roads@example.com',
+    { name: 'Roads & Traffic Department', type: 'municipal_department', email: 'roads@example.com',
       routes: ['traffic-infrastructure'] },
     { name: 'Parks & Greenery NGO', type: 'ngo', email: 'parks@example.com',
       routes: ['vegetation'] },
-    { name: 'Sanitation Group', type: 'informal_group', email: 'sanitation@example.com',
+    { name: 'Sanitation Group', type: 'other', email: 'sanitation@example.com',
       routes: ['other'] },
   ],
   // Demo reports across Subotica and Palić — varied categories, priorities, statuses, and support
@@ -119,6 +120,18 @@ async function upsertUser({ tenantId, email, password, fullName, role }) {
   );
 }
 
+async function upsertSuperAdmin({ email, password, fullName }) {
+  const hash = await bcrypt.hash(password, 12);
+  const { rows } = await pool.query('SELECT id FROM users WHERE tenant_id IS NULL AND email = $1', [email]);
+  if (rows[0]) {
+    await pool.query('UPDATE users SET password_hash = $1, full_name = $2, role = $3, is_email_verified = TRUE WHERE id = $4',
+      [hash, fullName, 'super_admin', rows[0].id]);
+    return;
+  }
+  await pool.query(`INSERT INTO users (tenant_id, email, password_hash, full_name, role, is_email_verified)
+    VALUES (NULL, $1, $2, $3, 'super_admin', TRUE)`, [email, hash, fullName]);
+}
+
 // Inserts the demo reports with their status-history chains. Idempotent: skips if the tenant already
 // has reports, so re-running the seed never duplicates them (and never touches real user reports).
 async function seedReports(tenantId, categoryIdBySlug, routeEntityByCategoryId) {
@@ -177,6 +190,7 @@ async function seed() {
   );
 
   await upsertUser({ tenantId: tenant.id, ...DEMO.admin, role: 'tenant_admin' });
+  await upsertSuperAdmin(DEMO.superAdmin);
   await upsertUser({ tenantId: tenant.id, ...DEMO.citizen, role: 'citizen' });
   for (const s of DEMO.staff) await upsertUser({ tenantId: tenant.id, ...s });
 
@@ -230,6 +244,7 @@ async function seed() {
   await pool.end();
   console.log(`Seeded tenant "${DEMO.tenant.slug}":`);
   console.log(`  admin   ${DEMO.admin.email} / ${DEMO.admin.password}  (tenant_admin)`);
+  console.log(`  main    ${DEMO.superAdmin.email} / ${DEMO.superAdmin.password}  (super_admin)`);
   console.log(`  citizen ${DEMO.citizen.email} / ${DEMO.citizen.password}  (citizen)`);
   for (const s of DEMO.staff) console.log(`  staff   ${s.email} / ${s.password}  (${s.role})`);
 }

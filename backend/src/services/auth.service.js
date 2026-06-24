@@ -57,11 +57,18 @@ export async function verifyEmail(token) {
 }
 
 export async function login(tenant, { email, password }) {
-  const { rows } = await query(
+  let { rows } = await query(
     `SELECT id, email, password_hash, full_name, role, is_email_verified, tenant_id
      FROM users WHERE tenant_id = $1 AND email = $2`,
     [tenant.id, email.toLowerCase()],
   );
+  if (!rows[0]) {
+    ({ rows } = await query(
+      `SELECT id, email, password_hash, full_name, role, is_email_verified, tenant_id
+       FROM users WHERE tenant_id IS NULL AND role = 'super_admin' AND email = $1`,
+      [email.toLowerCase()],
+    ));
+  }
   const user = rows[0];
   if (!user || !(await bcrypt.compare(password, user.password_hash))) {
     throw ApiError.unauthorized('Invalid credentials');

@@ -210,9 +210,15 @@ route is tenant-scoped.
 | PATCH  | `/reports/:id/status`      | staff  | Change status (validated transition + history)   |
 | PATCH  | `/reports/:id/priority`    | staff  | Update priority                                  |
 | PATCH  | `/reports/:id/assign`      | staff  | Assign to an entity (`accepted`→`assigned`); omit `entityId` to use the category route |
-| POST   | `/reports/:id/merge`       | staff  | Merge as duplicate of `canonicalId` (closes it)  |
+| POST   | `/reports/:id/merge`       | staff  | Merge as duplicate of `canonicalId` with required `note` (closes it) |
+| GET    | `/reports/:id/assignment-history` | staff | List assignment/reassignment audit history |
 | GET    | `/reports/:id/comments`    | staff  | List internal comments                           |
 | POST   | `/reports/:id/comments`    | staff  | Add an internal comment                          |
+| GET    | `/work-orders`             | staff  | List all tenant work orders                      |
+| GET    | `/reports/:id/work-orders` | staff  | List work orders for a report                    |
+| POST   | `/reports/:id/work-orders` | conductor/admin | Create a draft work order              |
+| GET    | `/work-orders/:id`         | staff  | Get work order details, documents, deliveries, events |
+| PATCH  | `/work-orders/:id/status`  | conductor/admin | Advance the work-order lifecycle        |
 
 `GET /reports` query params: `status`, `priority`, `categoryId`, `assignedEntityId`, `q`,
 `sort` (`recent` | `top` | `priority`), `page`, `limit`.
@@ -244,10 +250,19 @@ route is tenant-scoped.
 ```json
 // PATCH /admin/reports/:id/status
 { "toStatus": "in_progress", "note": "Crew dispatched" }
+// closing or reopening requires a non-empty note; resolving/closing is blocked while active work orders exist
+{ "toStatus": "closed", "note": "Closed after confirmation" }
 // PATCH /admin/reports/:id/assign  (entityId optional → category's automatic route)
 { "entityId": "…" }
 // POST /admin/reports/:id/merge
-{ "canonicalId": "…" }
+{ "canonicalId": "…", "note": "Same issue reported two streets away" }
+// duplicate merge is blocked if either report has active assignment/work orders
+// POST /admin/reports/:id/work-orders
+{ "entityId": "…", "title": "Repair pothole", "description": "Crew instructions", "dueAt": "2026-07-01T10:00:00.000Z" }
+// PATCH /admin/work-orders/:id/status
+{ "toStatus": "sent", "note": "Sent to entity by email" }
+// cancellation requires a reason; work orders are not deleted from normal operations
+{ "toStatus": "cancelled", "note": "Created for the wrong responsible entity" }
 ```
 
 > Public statistics (`GET /api/v1/stats`) and super-admin tenant management are documented in their

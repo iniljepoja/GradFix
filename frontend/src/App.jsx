@@ -16,6 +16,9 @@ import AdminLayout from './features/admin/AdminLayout.jsx';
 import AdminDashboardPage from './features/admin/AdminDashboardPage.jsx';
 import ReportsQueuePage from './features/admin/ReportsQueuePage.jsx';
 import AdminReportDetailPage from './features/admin/AdminReportDetailPage.jsx';
+import WorkOrdersPage from './features/admin/WorkOrdersPage.jsx';
+import PlatformAdminPage from './features/admin/PlatformAdminPage.jsx';
+import ResponsibleEntitiesPage from './features/admin/ResponsibleEntitiesPage.jsx';
 
 export default function App() {
   return (
@@ -41,6 +44,9 @@ export default function App() {
           <Route index element={<AdminDashboardPage />} />
           <Route path="reports" element={<ReportsQueuePage />} />
           <Route path="reports/:id" element={<AdminReportDetailPage />} />
+          <Route path="work-orders" element={<WorkOrdersPage />} />
+          <Route path="entities" element={<ResponsibleEntitiesPage />} />
+          <Route path="platform" element={<PlatformAdminPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

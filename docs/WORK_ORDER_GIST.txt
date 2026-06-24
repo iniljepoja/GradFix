@@ -75,6 +75,8 @@ A report should become resolved only when required work orders are completed or 
 
 Important rules
 - Work orders should usually be created manually by Conductor or Tenant Admin after a report is accepted.
+- Work orders created by mistake should be cancelled with a reason, not deleted.
+- A report can have multiple work orders, but only one active work order per responsible entity by default.
 - Automatic routing can suggest the responsible entity, but should not silently send a work order.
 - Sent PDFs must be immutable snapshots.
 - Regenerating a sent PDF should create a new document version.

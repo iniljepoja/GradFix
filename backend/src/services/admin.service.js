@@ -1,5 +1,6 @@
 import { query, withTransaction } from '../config/db.js';
 import { ApiError } from '../utils/ApiError.js';
+import { assertNoActiveWorkOrders } from './report.service.js';
 
 // Admin report listing: filters + search + pagination, including private fields
 // (reporter, assigned entity, duplicate linkage) that the public list omits.
@@ -26,6 +27,12 @@ export async function listReports(tenantId, f) {
             r.reporter_id AS "reporterId", u.email AS "reporterEmail",
             r.assigned_entity_id AS "assignedEntityId", e.name AS "assignedEntityName",
             r.duplicate_of_id AS "duplicateOfId",
+            (SELECT count(*)::int FROM work_orders wo
+             WHERE wo.tenant_id = r.tenant_id AND wo.report_id = r.id
+               AND wo.status IN ('draft', 'sent', 'delivery_failed', 'in_progress')) AS "activeWorkOrderCount",
+            (SELECT count(*)::int FROM work_orders wo
+             WHERE wo.tenant_id = r.tenant_id AND wo.report_id = r.id
+               AND wo.status IN ('sent', 'in_progress')) AS "startedWorkOrderCount",
             r.latitude, r.longitude, r.upvote_count AS "upvoteCount",
             r.created_at AS "createdAt", r.resolved_at AS "resolvedAt", r.closed_at AS "closedAt"
      FROM reports r
@@ -50,6 +57,12 @@ export async function getReport(tenantId, reportId) {
             r.reporter_id AS "reporterId", u.email AS "reporterEmail", u.full_name AS "reporterName",
             r.assigned_entity_id AS "assignedEntityId", e.name AS "assignedEntityName",
             r.duplicate_of_id AS "duplicateOfId",
+            (SELECT count(*)::int FROM work_orders wo
+             WHERE wo.tenant_id = r.tenant_id AND wo.report_id = r.id
+               AND wo.status IN ('draft', 'sent', 'delivery_failed', 'in_progress')) AS "activeWorkOrderCount",
+            (SELECT count(*)::int FROM work_orders wo
+             WHERE wo.tenant_id = r.tenant_id AND wo.report_id = r.id
+               AND wo.status IN ('sent', 'in_progress')) AS "startedWorkOrderCount",
             r.created_at AS "createdAt", r.resolved_at AS "resolvedAt", r.closed_at AS "closedAt"
      FROM reports r
      LEFT JOIN users u ON u.id = r.reporter_id
@@ -68,7 +81,7 @@ async function loadReport(tenantId, reportId, client = null) {
   const runner = client ?? { query };
   const { rows } = await runner.query(
     `SELECT id, status, category_id, assigned_entity_id, duplicate_of_id
-     FROM reports WHERE id = $1 AND tenant_id = $2`,
+     FROM reports WHERE id = $1 AND tenant_id = $2${client ? ' FOR UPDATE' : ''}`,
     [reportId, tenantId]);
   if (!rows[0]) throw ApiError.notFound('Report not found');
   return rows[0];
@@ -107,7 +120,16 @@ export async function assignEntity(tenantId, reportId, entityId, userId) {
       [target, tenantId]);
     if (!ent[0]) throw ApiError.badRequest('Unknown responsible entity for this tenant');
 
+    const previous = report.assigned_entity_id;
     await c.query('UPDATE reports SET assigned_entity_id = $1 WHERE id = $2', [target, reportId]);
+    if (previous !== target || report.status === 'accepted') {
+      await c.query(
+        `INSERT INTO report_assignment_history
+           (tenant_id, report_id, changed_by, from_responsible_entity_id, to_responsible_entity_id, note)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [tenantId, reportId, userId, previous, target, previous && previous !== target ? 'Reassigned responsible entity' : 'Assigned responsible entity'],
+      );
+    }
     if (report.status === 'accepted') {
       await c.query('UPDATE reports SET status = $1 WHERE id = $2', ['assigned', reportId]);
       await c.query(
@@ -120,22 +142,49 @@ export async function assignEntity(tenantId, reportId, entityId, userId) {
 }
 
 // Merge a duplicate into a canonical report: link it and close it (append status history).
-export async function mergeDuplicate(tenantId, duplicateId, canonicalId, userId) {
+export async function mergeDuplicate(tenantId, duplicateId, canonicalId, userId, note) {
   if (duplicateId === canonicalId) throw ApiError.badRequest('A report cannot be a duplicate of itself');
+  if (!note?.trim()) throw ApiError.badRequest('Merge reason is required');
   return withTransaction(async (c) => {
     const dup = await loadReport(tenantId, duplicateId, c);
     const canonical = await loadReport(tenantId, canonicalId, c);
     if (canonical.duplicate_of_id) throw ApiError.badRequest('Canonical report is itself a duplicate');
     if (dup.status === 'closed') throw ApiError.badRequest('Duplicate is already closed');
+    if (['assigned', 'in_progress'].includes(dup.status)) {
+      throw ApiError.conflict('Cannot merge a report with an active assignment');
+    }
+    if (['assigned', 'in_progress'].includes(canonical.status)) {
+      throw ApiError.conflict('Cannot merge into a report with an active assignment');
+    }
+    await assertNoActiveWorkOrders(c, tenantId, duplicateId, 'Cannot merge a report with active work orders');
+    await assertNoActiveWorkOrders(c, tenantId, canonicalId, 'Cannot merge into a report with active work orders');
 
     await c.query('UPDATE reports SET duplicate_of_id = $1, status = $2, closed_at = now() WHERE id = $3',
       [canonicalId, 'closed', duplicateId]);
     await c.query(
       `INSERT INTO report_status_history (report_id, changed_by, from_status, to_status, note)
        VALUES ($1, $2, $3, 'closed', $4)`,
-      [duplicateId, userId, dup.status, `Merged into ${canonicalId}`]);
+      [duplicateId, userId, dup.status, `Merged into ${canonicalId}: ${note.trim()}`]);
     return { id: duplicateId, duplicateOfId: canonicalId, status: 'closed' };
   });
+}
+
+export async function listAssignmentHistory(tenantId, reportId) {
+  await loadReport(tenantId, reportId);
+  const { rows } = await query(
+    `SELECT ah.id, ah.changed_by AS "changedBy", u.full_name AS "changedByName",
+            ah.from_responsible_entity_id AS "fromResponsibleEntityId", from_e.name AS "fromResponsibleEntityName",
+            ah.to_responsible_entity_id AS "toResponsibleEntityId", to_e.name AS "toResponsibleEntityName",
+            ah.note, ah.created_at AS "createdAt"
+     FROM report_assignment_history ah
+     LEFT JOIN users u ON u.id = ah.changed_by
+     LEFT JOIN responsible_entities from_e ON from_e.id = ah.from_responsible_entity_id
+     LEFT JOIN responsible_entities to_e ON to_e.id = ah.to_responsible_entity_id
+     WHERE ah.tenant_id = $1 AND ah.report_id = $2
+     ORDER BY ah.created_at`,
+    [tenantId, reportId],
+  );
+  return rows;
 }
 
 export async function addComment(tenantId, reportId, authorId, { body, isInternal = true }) {

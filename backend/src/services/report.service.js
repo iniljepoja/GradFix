@@ -14,10 +14,21 @@ export const STATUS_TRANSITIONS = {
   closed: [],
 };
 
-export function assertTransition(from, to) {
+export function requiresStatusReason(from, to) {
+  return to === 'closed' || (from === 'resolved' && to === 'in_progress');
+}
+
+export function requiresStartedWorkOrder(from, to) {
+  return to === 'in_progress' && from !== 'resolved';
+}
+
+export function assertTransition(from, to, note) {
   if (from === to) throw ApiError.badRequest(`Report is already "${to}"`);
   if (!STATUS_TRANSITIONS[from]?.includes(to)) {
     throw ApiError.badRequest(`Illegal status transition: ${from} → ${to}`);
+  }
+  if (requiresStatusReason(from, to) && !note?.trim()) {
+    throw ApiError.badRequest('A reason is required for this status change');
   }
 }
 
@@ -129,7 +140,13 @@ export async function changeStatus(tenantId, reportId, userId, { toStatus, note 
     );
     if (!rows[0]) throw ApiError.notFound('Report not found');
     const fromStatus = rows[0].status;
-    assertTransition(fromStatus, toStatus);
+    assertTransition(fromStatus, toStatus, note);
+    if (requiresStartedWorkOrder(fromStatus, toStatus)) {
+      await assertHasStartedWorkOrder(c, tenantId, reportId);
+    }
+    if (['resolved', 'closed'].includes(toStatus)) {
+      await assertNoActiveWorkOrders(c, tenantId, reportId, `Cannot mark report ${toStatus} while active work orders exist`);
+    }
 
     const resolvedAt = toStatus === 'resolved' ? 'now()' : 'resolved_at';
     const closedAt = toStatus === 'closed' ? 'now()' : 'closed_at';
@@ -150,6 +167,27 @@ export async function changeStatus(tenantId, reportId, userId, { toStatus, note 
     console.error('Status notification failed:', err.message));
 
   return { id: result.id, fromStatus: result.fromStatus, status: result.status };
+}
+
+export async function assertNoActiveWorkOrders(c, tenantId, reportId, message) {
+  const { rows } = await c.query(
+    `SELECT id FROM work_orders
+     WHERE tenant_id = $1 AND report_id = $2
+       AND status IN ('draft', 'sent', 'delivery_failed', 'in_progress')
+     LIMIT 1`,
+    [tenantId, reportId],
+  );
+  if (rows[0]) throw ApiError.conflict(message);
+}
+
+async function assertHasStartedWorkOrder(c, tenantId, reportId) {
+  const { rows } = await c.query(
+    `SELECT id FROM work_orders
+     WHERE tenant_id = $1 AND report_id = $2 AND status IN ('sent', 'in_progress')
+     LIMIT 1`,
+    [tenantId, reportId],
+  );
+  if (!rows[0]) throw ApiError.conflict('Cannot mark report in progress before a Work Order is sent or started');
 }
 
 // Reports filed by a given user (profile history), most recent first.

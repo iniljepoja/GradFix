@@ -150,6 +150,14 @@ textarea.input { min-height: 96px; resize: vertical; }
 .priority-high { background: #fff3e0; color: #b26a00; }
 .priority-critical { background: #fdecea; color: #c0392b; }
 
+/* Work order status pills */
+.work-order-draft { background: #eef1f4; color: #41505f; }
+.work-order-sent { background: #eaf2fd; color: #1a5fd0; }
+.work-order-delivery_failed { background: #fdecea; color: #c0392b; }
+.work-order-in_progress { background: #fff8e1; color: #8a6d00; }
+.work-order-completed { background: #e8f6ee; color: #1e8e4f; }
+.work-order-cancelled, .work-order-superseded { background: #ececec; color: #5b6470; }
+
 /* Admin panel */
 .admin-shell { display: flex; gap: 24px; align-items: flex-start; width: 100%; max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
 .admin-sidebar { flex: 0 0 170px; position: sticky; top: 64px; display: flex; flex-direction: column; gap: 4px; }
