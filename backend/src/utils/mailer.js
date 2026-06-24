@@ -11,10 +11,11 @@ if (env.mail.host) {
   });
 }
 
-export async function sendMail({ to, subject, html, text }) {
+export async function sendMail({ to, subject, html, text, attachments }) {
   if (!transporter) {
-    console.log(`\n[mailer] To: ${to}\n[mailer] Subject: ${subject}\n[mailer] ${text || html}\n`);
+    console.log(`\n[mailer] To: ${to}\n[mailer] Subject: ${subject}\n[mailer] ${text || html}` +
+      (attachments?.length ? `\n[mailer] Attachments: ${attachments.map((a) => a.filename).join(', ')}` : '') + '\n');
     return;
   }
-  await transporter.sendMail({ from: env.mail.from, to, subject, html, text });
+  await transporter.sendMail({ from: env.mail.from, to, subject, html, text, attachments });
 }

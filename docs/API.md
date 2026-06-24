@@ -218,7 +218,10 @@ route is tenant-scoped.
 | GET    | `/reports/:id/work-orders` | staff  | List work orders for a report                    |
 | POST   | `/reports/:id/work-orders` | conductor/admin | Create a draft work order              |
 | GET    | `/work-orders/:id`         | staff  | Get work order details, documents, deliveries, events |
-| PATCH  | `/work-orders/:id/status`  | conductor/admin | Advance the work-order lifecycle        |
+| PATCH  | `/work-orders/:id/status`  | conductor/admin | Advance the work-order lifecycle (`sent` delegates to the send flow) |
+| POST   | `/work-orders/:id/send`    | conductor/admin | Generate an immutable PDF snapshot + email it to the responsible entity; transitions to `sent` or `delivery_failed`, recording a delivery attempt (+ audit events) |
+| POST   | `/work-orders/:id/document` | conductor/admin | Regenerate a new immutable PDF version without sending (after-send regeneration: new version) |
+| GET    | `/work-orders/:id/document` | staff  | Download the current (latest) PDF document |
 
 `GET /reports` query params: `status`, `priority`, `categoryId`, `assignedEntityId`, `q`,
 `sort` (`recent` | `top` | `priority`), `page`, `limit`.
@@ -261,6 +264,14 @@ route is tenant-scoped.
 { "entityId": "…", "title": "Repair pothole", "description": "Crew instructions", "dueAt": "2026-07-01T10:00:00.000Z" }
 // PATCH /admin/work-orders/:id/status
 { "toStatus": "sent", "note": "Sent to entity by email" }
+// `sent` delegates to the send flow (PDF + email delivery); status becomes sent/delivery_failed
+// issuing a work order (generate immutable PDF + email to responsible entity):
+// POST /admin/work-orders/:id/send
+{ "regenerate": false }
+// → { "status": "sent" | "delivery_failed", "documentId": "...", "deliveryId": "..." }
+// retryable on delivery_failed once the entity's email is configured/fixed
+// POST /admin/work-orders/:id/document  — regenerate a new immutable PDF version (no send)
+// GET  /admin/work-orders/:id/document  — download the latest PDF
 // cancellation requires a reason; work orders are not deleted from normal operations
 { "toStatus": "cancelled", "note": "Created for the wrong responsible entity" }
 ```

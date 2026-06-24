@@ -1,12 +1,16 @@
 import { query, withTransaction } from '../config/db.js';
 import { ApiError } from '../utils/ApiError.js';
+import { sendMail } from '../utils/mailer.js';
+import {
+  persistDocument, getCurrentDocument, readDocumentFile, documentFileName,
+} from './work-order-document.service.js';
 
 export const WORK_ORDER_STATUSES = [
   'draft', 'sent', 'delivery_failed', 'in_progress', 'completed', 'cancelled', 'superseded',
 ];
 
 export const WORK_ORDER_TRANSITIONS = {
-  draft: ['sent', 'cancelled'],
+  draft: ['sent', 'delivery_failed', 'cancelled'],
   sent: ['in_progress', 'delivery_failed', 'cancelled', 'superseded'],
   delivery_failed: ['sent', 'cancelled'],
   in_progress: ['completed', 'cancelled', 'superseded'],
@@ -14,6 +18,16 @@ export const WORK_ORDER_TRANSITIONS = {
   cancelled: [],
   superseded: [],
 };
+
+// Statuses from which a work order may be sent (initial send from draft, retry from
+// delivery_failed). Sending is the operational path that produces a PDF + email delivery.
+export const SENDABLE_STATUSES = ['draft', 'delivery_failed'];
+
+export function assertCanSendWorkOrder(status) {
+  if (!SENDABLE_STATUSES.includes(status)) {
+    throw ApiError.badRequest(`Work order cannot be sent from "${status}"`);
+  }
+}
 
 const ACTIVE_STATUSES = ['draft', 'sent', 'delivery_failed', 'in_progress'];
 
@@ -178,6 +192,9 @@ export async function createWorkOrder(tenantId, reportId, userId, body) {
 }
 
 export async function changeWorkOrderStatus(tenantId, workOrderId, userId, { toStatus, note }) {
+  // `sent` is achieved through the operational send path (PDF + email delivery), not a bare
+  // status flip. Delegate so the API stays consistent regardless of which route a caller uses.
+  if (toStatus === 'sent') return sendWorkOrder(tenantId, workOrderId, userId, {});
   return withTransaction(async (c) => {
     const { rows } = await c.query(
       `SELECT id, report_id, status FROM work_orders
@@ -266,6 +283,145 @@ async function moveReportInProgress(c, tenantId, reportId, userId) {
      VALUES ($1, $2, $3, 'in_progress', 'Work order started')`,
     [reportId, userId, rows[0].status],
   );
+}
+
+// ── PDF generation + email delivery ─────────────────────────────────────────
+// The operational purpose of a work order: generate an immutable PDF snapshot and email it to
+// the responsible entity. Email failure does NOT lose the work order — it becomes
+// `delivery_failed` with a recorded delivery attempt and is retryable. Every attempt is audited.
+
+export async function regenerateDocument(tenantId, workOrderId, userId) {
+  return withTransaction(async (c) => {
+    await lockWorkOrder(c, tenantId, workOrderId);
+    const doc = await persistDocument(c, tenantId, workOrderId, userId, { regenerate: true });
+    await insertEvent(c, tenantId, workOrderId, userId, 'work_order.pdf_regenerated',
+      null, null, `Generated version ${doc.version}`);
+    return doc;
+  });
+}
+
+export async function sendWorkOrder(tenantId, workOrderId, userId, { regenerate = false } = {}) {
+  // Stage 1 — generate/reuse the immutable document and queue a delivery. The work order keeps
+  // its current status so a crash here never leaves a half-sent, unrecoverable record.
+  const { workOrder, document: doc, deliveryId, recipientEmail } = await withTransaction(async (c) => {
+    const wo = await lockWorkOrder(c, tenantId, workOrderId);
+    assertCanSendWorkOrder(wo.status);
+
+    const generated = await persistDocument(c, tenantId, workOrderId, userId, { regenerate });
+    const fresher = !wo.lastDocumentId || generated.id !== wo.lastDocumentId;
+    if (fresher) {
+      await insertEvent(c, tenantId, workOrderId, userId, 'work_order.pdf_generated',
+        null, null, `Generated version ${generated.version}`);
+    }
+    // The PDF body is an immutable snapshot, but the delivery recipient is operational metadata,
+    // so resolve it fresh from the responsible entity (a retry picks up a corrected/added email).
+    const { rows: entityRows } = await c.query(
+      'SELECT email FROM responsible_entities WHERE id = $1 AND tenant_id = $2',
+      [wo.responsible_entity_id ?? generated.snapshot?.responsibleEntity?.id, tenantId],
+    );
+    const recipient = entityRows[0]?.email ?? null;
+
+    const { rows: deliveryRows } = await c.query(
+      `INSERT INTO work_order_deliveries (tenant_id, work_order_id, document_id, channel, recipient_email, status)
+       VALUES ($1, $2, $3, 'email', $4, 'queued')
+       RETURNING id`,
+      [tenantId, workOrderId, generated.id, recipient],
+    );
+    // A retry (issuing from delivery_failed) is audited as email_retried, per the Work Order
+    // gist's audit-event list; an initial send from draft is email_queued.
+    const queueEvent = wo.status === 'delivery_failed' ? 'work_order.email_retried' : 'work_order.email_queued';
+    await insertEvent(c, tenantId, workOrderId, userId, queueEvent,
+      null, null, recipient ? `Queued to ${recipient}` : 'Queued (no recipient email)');
+    return { workOrder: wo, document: generated, deliveryId: deliveryRows[0].id, recipientEmail: recipient };
+  });
+
+  // Stage 2 — actually send the email, outside the transaction. A failure here is recoverable.
+  const result = await deliverByEmail(workOrderId, doc, recipientEmail, workOrder.title);
+
+  // Stage 3 — record the delivery result and transition the work order status + audit events.
+  return withTransaction(async (c) => {
+    const wo = await lockWorkOrder(c, tenantId, workOrderId);
+    const toStatus = result.ok ? 'sent' : 'delivery_failed';
+    const sameState = wo.status === toStatus; // retry that fails again — no status change
+
+    if (!sameState) assertWorkOrderTransition(wo.status, toStatus, result.ok ? undefined : result.error);
+
+    if (result.ok) {
+      await c.query(
+        `UPDATE work_order_deliveries SET status = 'sent', attempt_count = attempt_count + 1,
+                 sent_at = now() WHERE id = $1`, [deliveryId]);
+    } else {
+      await c.query(
+        `UPDATE work_order_deliveries SET status = 'failed', attempt_count = attempt_count + 1,
+                 last_error = $2, failed_at = now() WHERE id = $1`,
+        [deliveryId, result.error]);
+    }
+
+    if (!sameState) {
+      await c.query(
+        result.ok
+          ? `UPDATE work_orders SET status = $1, sent_at = now() WHERE id = $2`
+          : `UPDATE work_orders SET status = $1 WHERE id = $2`,
+        [toStatus, workOrderId]);
+    }
+
+    await insertEvent(c, tenantId, workOrderId, userId,
+      result.ok ? 'work_order.email_sent' : 'work_order.email_failed',
+      sameState ? null : wo.status, sameState ? null : toStatus,
+      result.ok ? `Sent to ${recipientEmail}` : result.error);
+    if (!sameState) {
+      await insertEvent(c, tenantId, workOrderId, userId, 'work_order.status_changed', wo.status, toStatus, 'Work order send');
+    }
+    return { id: workOrderId, fromStatus: wo.status, status: toStatus, documentId: doc.id, deliveryId };
+  });
+}
+
+export async function downloadDocumentFile(tenantId, workOrderId) {
+  await getById(tenantId, workOrderId);
+  const doc = await getCurrentDocument(tenantId, workOrderId);
+  if (!doc) throw ApiError.notFound('No document has been generated for this work order');
+  const buffer = await readDocumentFile(doc.storageKey);
+  return { buffer, fileName: documentFileName(doc), contentType: doc.storageKey.endsWith('.pdf') ? 'application/pdf' : 'text/plain' };
+}
+
+async function lockWorkOrder(c, tenantId, workOrderId) {
+  const { rows } = await c.query(
+    `SELECT wo.id, wo.report_id, wo.status, wo.title, wo.created_by, wo.responsible_entity_id,
+            (SELECT max(version) FROM work_order_documents d WHERE d.work_order_id = wo.id) IS NOT NULL
+              AS "hasDocument",
+            (SELECT id FROM work_order_documents d WHERE d.work_order_id = wo.id
+              ORDER BY version DESC LIMIT 1) AS "lastDocumentId"
+     FROM work_orders wo WHERE wo.id = $1 AND wo.tenant_id = $2 FOR UPDATE`,
+    [workOrderId, tenantId],
+  );
+  if (!rows[0]) throw ApiError.notFound('Work order not found');
+  return rows[0];
+}
+
+async function deliverByEmail(workOrderId, document, recipientEmail, workOrderTitle) {
+  if (!recipientEmail) {
+    return { ok: false, error: 'Responsible entity has no email address configured' };
+  }
+  const subject = `GradFix work order: ${workOrderTitle}`;
+  const text = `A work order has been issued to your organization.\n\nWork order: ${workOrderTitle}\nReference: ${workOrderId}\n\nThe full work order document is attached.`;
+  const html = `<p>A work order has been issued to your organization.</p>` +
+    `<p><strong>${escapeHtml(workOrderTitle)}</strong></p>` +
+    `<p>Reference: ${workOrderId}</p><p>The full work order document is attached.</p>`;
+  try {
+    await sendMail({
+      to: recipientEmail, subject, text, html,
+      attachments: [{ filename: documentFileName(document), content: await readDocumentFile(document.storageKey) }],
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+function escapeHtml(s) {
+  return (s == null ? '' : String(s))
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 async function resolveReportIfWorkComplete(c, tenantId, reportId, userId) {

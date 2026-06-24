@@ -188,6 +188,28 @@ router.patch('/work-orders/:id/status', canManageWorkOrders,
     res.json({ data: await workOrders.changeWorkOrderStatus(req.tenant.id, req.params.id, req.user.id, req.body) });
   }));
 
+// Generate (or regenerate) an immutable PDF document version for a work order without emailing it.
+router.post('/work-orders/:id/document', canManageWorkOrders,
+  wrap(async (req, res) => {
+    res.status(201).json({ data: await workOrders.regenerateDocument(req.tenant.id, req.params.id, req.user.id) });
+  }));
+
+// Issuing a work order: generate an immutable PDF snapshot and email it to the responsible entity.
+// Records a delivery attempt; transitions the work order to `sent` or `delivery_failed`.
+router.post('/work-orders/:id/send', canManageWorkOrders,
+  validate({ body: z.object({ regenerate: z.boolean().default(false) }).optional() }),
+  wrap(async (req, res) => {
+    res.json({ data: await workOrders.sendWorkOrder(req.tenant.id, req.params.id, req.user.id, req.body ?? {}) });
+  }));
+
+// Download the current (latest) immutable PDF document for a work order.
+router.get('/work-orders/:id/document', wrap(async (req, res) => {
+  const { buffer, fileName, contentType } = await workOrders.downloadDocumentFile(req.tenant.id, req.params.id);
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  res.send(buffer);
+}));
+
 // ── Responsible entities & routing ──────────────────────────────────────────
 router.get('/entities', wrap(async (req, res) => {
   res.json({ data: await entities.listEntities(req.tenant.id) });
