@@ -16,7 +16,7 @@ import Spinner from '../../components/Spinner.jsx';
 import StatusChangeDialog from './StatusChangeDialog.jsx';
 import AssignDialog from './AssignDialog.jsx';
 import MergeDuplicateDialog from './MergeDuplicateDialog.jsx';
-import { WorkOrderPill } from './WorkOrdersPage.jsx';
+import { WorkOrderActions, WorkOrderDetails, WorkOrderPill } from './WorkOrdersPage.jsx';
 
 const fmt = (s) => new Date(s).toLocaleString(undefined, {
   day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -29,6 +29,7 @@ export default function AdminReportDetailPage() {
   const [dialog, setDialog] = useState(null); // 'status' | 'assign' | 'merge'
   const [comment, setComment] = useState('');
   const [workOrderEntityId, setWorkOrderEntityId] = useState('');
+  const [expandedWorkOrderId, setExpandedWorkOrderId] = useState(null);
 
   const reportQuery = useQuery({ queryKey: ['admin-report', id], queryFn: () => adminApi.getReport(id) });
   const historyQuery = useQuery({ queryKey: ['report-history', id], queryFn: () => reportsApi.history(id) });
@@ -57,12 +58,29 @@ export default function AdminReportDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['report-history', id] });
     },
   });
+  const invalidateWorkOrders = () => {
+    queryClient.invalidateQueries({ queryKey: ['admin-report-work-orders', id] });
+    queryClient.invalidateQueries({ queryKey: ['admin-work-orders'] });
+    queryClient.invalidateQueries({ queryKey: ['admin-work-order'] });
+    queryClient.invalidateQueries({ queryKey: ['admin-report', id] });
+    queryClient.invalidateQueries({ queryKey: ['report-history', id] });
+  };
   const cancelWorkOrderM = useMutation({
     mutationFn: ({ workOrderId, note }) => adminApi.changeWorkOrderStatus(workOrderId, { toStatus: 'cancelled', note }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-report-work-orders', id] });
-      queryClient.invalidateQueries({ queryKey: ['admin-work-orders'] });
-    },
+    onSuccess: invalidateWorkOrders,
+  });
+  const sendWorkOrderM = useMutation({ mutationFn: (workOrderId) => adminApi.sendWorkOrder(workOrderId), onSuccess: invalidateWorkOrders });
+  const statusWorkOrderM = useMutation({
+    mutationFn: ({ workOrderId, toStatus }) => adminApi.changeWorkOrderStatus(workOrderId, { toStatus }),
+    onSuccess: invalidateWorkOrders,
+  });
+  const regenerateWorkOrderM = useMutation({
+    mutationFn: (workOrderId) => adminApi.regenerateWorkOrderDocument(workOrderId),
+    onSuccess: invalidateWorkOrders,
+  });
+  const downloadWorkOrderM = useMutation({
+    mutationFn: (workOrderId) => adminApi.downloadWorkOrderDocument(workOrderId),
+    onSuccess: saveDownload,
   });
 
   const onCancelWorkOrder = (workOrderId) => {
@@ -85,6 +103,8 @@ export default function AdminReportDetailPage() {
   const selectedWorkOrderEntityId = workOrderEntityId || r.assignedEntityId || '';
   const hasActiveWorkOrderForSelectedEntity = !!selectedWorkOrderEntityId && (workOrdersQuery.data || [])
     .some((wo) => wo.responsibleEntityId === selectedWorkOrderEntityId && canCancelWorkOrder(wo.status));
+  const workOrderActionPending = cancelWorkOrderM.isPending || sendWorkOrderM.isPending || statusWorkOrderM.isPending || regenerateWorkOrderM.isPending || downloadWorkOrderM.isPending;
+  const workOrderActionError = cancelWorkOrderM.error || sendWorkOrderM.error || statusWorkOrderM.error || regenerateWorkOrderM.error || downloadWorkOrderM.error;
 
   return (
     <div className="stack">
@@ -112,8 +132,15 @@ export default function AdminReportDetailPage() {
           <div className="card stack">
             <strong>Location & reporter</strong>
             {r.address && <div>{r.address}</div>}
-            <div className="report-meta">{r.latitude.toFixed(5)}, {r.longitude.toFixed(5)} · {r.categoryName}</div>
-            <div className="report-meta">Reporter: {r.reporterEmail || '—'} · 👥 {r.upvoteCount} affected · filed {fmt(r.createdAt)}</div>
+            <div className="report-meta">
+              Pin: {r.latitude.toFixed(5)}, {r.longitude.toFixed(5)}
+              {' · '}
+              <a target="_blank" rel="noreferrer"
+                href={`https://www.openstreetmap.org/?mlat=${r.latitude}&mlon=${r.longitude}#map=18/${r.latitude}/${r.longitude}`}>
+                View on map ↗
+              </a>
+            </div>
+            <div className="report-meta">{r.categoryName} · Reporter: {r.reporterEmail || '—'} · 👥 {r.upvoteCount} affected · filed {fmt(r.createdAt)}</div>
           </div>
 
           <div className="card stack">
@@ -163,30 +190,44 @@ export default function AdminReportDetailPage() {
             {hasActiveWorkOrderForSelectedEntity && <p className="field-hint">An active Work Order already exists for the selected responsible entity.</p>}
             {r.status === 'accepted' && <p className="field-hint">Creating a draft Work Order will move this report to Assigned.</p>}
             {createWorkOrderM.isError && <div className="alert alert-error">{apiErrorMessage(createWorkOrderM.error)}</div>}
-            {cancelWorkOrderM.isError && <div className="alert alert-error">{apiErrorMessage(cancelWorkOrderM.error)}</div>}
+            {workOrderActionError && <div className="alert alert-error">{apiErrorMessage(workOrderActionError)}</div>}
             {workOrdersQuery.isLoading && <Spinner />}
             {workOrdersQuery.isError && <div className="alert alert-error">Could not load work orders.</div>}
             {workOrdersQuery.data && workOrdersQuery.data.length === 0 && <p className="muted" style={{ margin: 0 }}>No work orders for this report yet.</p>}
             {workOrdersQuery.data && workOrdersQuery.data.length > 0 && (
               <div className="report-list">
                 {workOrdersQuery.data.map((wo) => (
-                  <div key={wo.id} className="report-item">
-                    <span>
-                      <strong>{wo.title}</strong>
-                      <span className="report-meta" style={{ display: 'block' }}>{wo.responsibleEntityName} · created {fmt(wo.createdAt)}</span>
-                      {wo.events?.length > 0 && (
-                        <span className="report-meta" style={{ display: 'block' }}>
-                          Last event: {wo.events[wo.events.length - 1].eventType.replace('work_order.', '').replace('_', ' ')}
-                          {wo.events[wo.events.length - 1].note ? ` · ${wo.events[wo.events.length - 1].note}` : ''}
-                        </span>
-                      )}
-                    </span>
-                    <span className="row" style={{ gap: 8, justifyContent: 'flex-end' }}>
-                      <WorkOrderPill status={wo.status} />
-                      {can(user, 'workOrder') && canCancelWorkOrder(wo.status) && (
-                        <button className="btn btn-sm" disabled={cancelWorkOrderM.isPending} onClick={() => onCancelWorkOrder(wo.id)}>Cancel</button>
-                      )}
-                    </span>
+                  <div key={wo.id} className="report-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                    <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <div>
+                        <strong>{wo.title}</strong>
+                        <div className="report-meta">{wo.responsibleEntityName} · created {fmt(wo.createdAt)}</div>
+                        {wo.events?.length > 0 && (
+                          <div className="report-meta">
+                            Last event: {wo.events[wo.events.length - 1].eventType.replace('work_order.', '').replace('_', ' ')}
+                            {wo.events[wo.events.length - 1].note ? ` · ${wo.events[wo.events.length - 1].note}` : ''}
+                          </div>
+                        )}
+                      </div>
+                      <span className="row" style={{ gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        <WorkOrderPill status={wo.status} />
+                        <WorkOrderActions
+                          workOrder={wo}
+                          canManage={can(user, 'workOrder')}
+                          disabled={workOrderActionPending}
+                          onSend={() => sendWorkOrderM.mutate(wo.id)}
+                          onStart={() => statusWorkOrderM.mutate({ workOrderId: wo.id, toStatus: 'in_progress' })}
+                          onComplete={() => statusWorkOrderM.mutate({ workOrderId: wo.id, toStatus: 'completed' })}
+                          onRegenerate={() => regenerateWorkOrderM.mutate(wo.id)}
+                          onDownload={() => downloadWorkOrderM.mutate(wo.id)}
+                          onCancel={() => onCancelWorkOrder(wo.id)}
+                        />
+                        <button className="btn btn-sm" onClick={() => setExpandedWorkOrderId(expandedWorkOrderId === wo.id ? null : wo.id)}>
+                          {expandedWorkOrderId === wo.id ? 'Hide' : 'Details'}
+                        </button>
+                      </span>
+                    </div>
+                    {expandedWorkOrderId === wo.id && <WorkOrderDetails id={wo.id} />}
                   </div>
                 ))}
               </div>
@@ -251,7 +292,10 @@ export default function AdminReportDetailPage() {
           <div className="card stack">
             <strong>Assignee</strong>
             <div>{r.assignedEntityName || <span className="muted">Unassigned</span>}</div>
-            <button className="btn btn-sm" onClick={() => setDialog('assign')}>Reassign…</button>
+            {!['new', 'resolved', 'closed'].includes(r.status) && (
+              <button className="btn btn-sm" onClick={() => setDialog('assign')}>Reassign…</button>
+            )}
+            {r.status === 'new' && <p className="field-hint" style={{ margin: 0 }}>Accept the report before assigning it.</p>}
           </div>
           <div className="card stack">
             <strong>Duplicate</strong>
@@ -268,4 +312,15 @@ export default function AdminReportDetailPage() {
       {dialog === 'merge' && <MergeDuplicateDialog report={r} onClose={() => setDialog(null)} />}
     </div>
   );
+}
+
+function saveDownload({ blob, fileName }) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }

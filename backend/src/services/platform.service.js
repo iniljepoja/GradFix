@@ -40,6 +40,44 @@ export async function updateTenant(id, body) {
   return rows[0];
 }
 
+export async function tenantStats(tenantId) {
+  const { rows: tenantRows } = await query(
+    'SELECT id FROM tenants WHERE id = $1',
+    [tenantId],
+  );
+  if (!tenantRows[0]) throw ApiError.notFound('Tenant not found');
+
+  const [reports, workOrders, users, entities] = await Promise.all([
+    query(
+      `SELECT count(*)::int AS total,
+              count(*) FILTER (WHERE status IN ('new', 'accepted', 'assigned', 'in_progress'))::int AS open,
+              count(*) FILTER (WHERE status IN ('resolved', 'closed'))::int AS resolved
+       FROM reports WHERE tenant_id = $1`,
+      [tenantId],
+    ),
+    query('SELECT count(*)::int AS total FROM work_orders WHERE tenant_id = $1', [tenantId]),
+    query(
+      `SELECT count(*)::int AS total,
+              count(*) FILTER (WHERE role = 'tenant_admin')::int AS tenant_admins
+       FROM users WHERE tenant_id = $1`,
+      [tenantId],
+    ),
+    query(
+      `SELECT count(*)::int AS total,
+              count(*) FILTER (WHERE is_active)::int AS active
+       FROM responsible_entities WHERE tenant_id = $1`,
+      [tenantId],
+    ),
+  ]);
+
+  return {
+    reports: reports.rows[0],
+    workOrders: workOrders.rows[0],
+    users: users.rows[0],
+    responsibleEntities: entities.rows[0],
+  };
+}
+
 export async function listReports({ tenantId, page = 1, limit = 50 } = {}) {
   const where = [];
   const params = [];

@@ -314,7 +314,7 @@ Summary of what is specified:
 
 Current implementation:
 - Registration, login, refresh tokens, logout, email verification, forgot/reset password, `/auth/me`, and `/reports/mine` exist.
-- Unverified users can log in but cannot create reports.
+- Unverified citizens cannot log in or create reports; staff and super_admin bypass verification.
 - Refresh token is stored in browser `localStorage`.
 
 Missing decisions:

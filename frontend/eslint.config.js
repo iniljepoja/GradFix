@@ -17,6 +17,7 @@ export default [
         console: 'readonly', navigator: 'readonly', FormData: 'readonly',
         URL: 'readonly', fetch: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly',
         createImageBitmap: 'readonly', File: 'readonly',
+        Notification: 'readonly', atob: 'readonly',
       },
     },
     settings: { react: { version: 'detect' } },
@@ -27,6 +28,18 @@ export default [
       'react/prop-types': 'off',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    // Service worker runs in a Worker scope: expose `self` and related globals.
+    files: ['src/sw.js'],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: 'module',
+      globals: {
+        self: 'readonly', caches: 'readonly', clients: 'readonly',
+        registration: 'readonly', pushManager: 'readonly',
+      },
     },
   },
 ];

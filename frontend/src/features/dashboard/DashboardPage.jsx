@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext.jsx';
 import * as reportsApi from '../../api/reports.js';
+import { usePushNotifications } from '../../lib/usePushNotifications.js';
 import BadgeCard from '../../components/BadgeCard.jsx';
 import StatusPill from '../../components/StatusPill.jsx';
 import Spinner from '../../components/Spinner.jsx';
@@ -15,6 +16,7 @@ export default function DashboardPage() {
     queryKey: ['my-reports'],
     queryFn: () => reportsApi.listMine({ limit: 50 }),
   });
+  const push = usePushNotifications();
 
   return (
     <div className="page stack">
@@ -37,6 +39,7 @@ export default function DashboardPage() {
               ? <span className="pill status-resolved">verified</span>
               : <span className="pill status-new">unverified</span>}
           </div>
+          <PushToggle push={push} />
         </div>
 
         {isCitizen && (
@@ -74,6 +77,40 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function PushToggle({ push }) {
+  const enabled = !!push.activeSubscription;
+  return (
+    <div className="stack" style={{ gap: 6, marginTop: 8 }}>
+      {enabled ? (
+        <>
+          <span className="report-meta" style={{ margin: 0 }}>Push notifications are on.</span>
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={push.unsubscribe}
+            disabled={push.subscribing}
+          >
+            {push.subscribing ? 'Disabling…' : 'Disable push notifications'}
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          className="btn btn-sm btn-primary"
+          onClick={push.subscribe}
+          disabled={push.subscribing || push.permission === 'denied'}
+        >
+          {push.subscribing ? 'Enabling…' : 'Enable push notifications'}
+        </button>
+      )}
+      {push.permission === 'denied' && (
+        <span className="report-meta">Push is blocked. Enable it in your browser site settings.</span>
+      )}
+      {push.error && <span className="report-meta">{push.error}</span>}
     </div>
   );
 }

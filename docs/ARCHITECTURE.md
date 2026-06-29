@@ -96,7 +96,7 @@ HTTP → Router → Middleware (auth/tenant/validate) → Controller → Service
   are stored **hashed** in `refresh_tokens` and rotated on use; logout revokes them.
 - **Passwords**: bcrypt (cost ≥ 12).
 - **Email verification**: on registration a single-use, hashed, time-limited token is emailed.
-  Unverified accounts may sign in but cannot create reports.
+  Unverified citizens cannot log in or create reports; staff and super_admin bypass verification.
 - **Password reset**: same single-use hashed-token pattern via `password_reset_tokens`.
 - **Transport/headers**: `helmet`, strict CORS allowlist, rate limiting on auth + write endpoints.
 - **Input validation** at the route boundary; parameterized SQL everywhere (no string interpolation).

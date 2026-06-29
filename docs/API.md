@@ -138,14 +138,19 @@ once the report is `resolved`/`closed`).
 
 ## Notifications — `/api/v1/notifications`
 
-| Method | Path     | Auth | Description                                  |
-| ------ | -------- | ---- | -------------------------------------------- |
-| POST   | `/push`  | ✓    | Register a Web Push subscription for the user |
+| Method | Path             | Auth | Description                                  |
+| ------ | ---------------- | ---- | -------------------------------------------- |
+| GET    | `/vapid-public`  | —    | VAPID public key for the browser push subscription |
+| POST   | `/push`          | ✓    | Register a Web Push subscription for the user |
 
-Status-change emails are sent automatically to the reporter. Push delivery is deferred (subscriptions
-are stored; delivery wires up once VAPID keys are provisioned).
+Status-change emails and Web Push notifications are sent automatically to the reporter. Push
+delivery uses VAPID (keys configured via `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`
+env vars). Subscriptions that return 404/410 are pruned automatically.
 
 ```json
+// GET /notifications/vapid-public
+{ "data": { "publicKey": "BJU9oILq…" } }
+
 // POST /notifications/push
 { "endpoint": "https://push…", "keys": { "p256dh": "…", "auth": "…" } }
 ```

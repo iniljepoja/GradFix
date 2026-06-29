@@ -1,9 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import {
   assertWorkOrderTransition, shouldResolveReportAfterCompletion, WORK_ORDER_TRANSITIONS,
   assertCanSendWorkOrder, SENDABLE_STATUSES,
 } from '../src/services/work-order.service.js';
+import { renderDocument } from '../src/services/work-order-document.service.js';
+import { env } from '../src/config/env.js';
 
 test('draft work orders can be sent, fail delivery, or be cancelled', () => {
   assert.deepEqual(WORK_ORDER_TRANSITIONS.draft, ['sent', 'delivery_failed', 'cancelled']);
@@ -53,4 +57,36 @@ test('last completed active work order resolves an in-progress report', () => {
   assert.equal(shouldResolveReportAfterCompletion('in_progress', 1), false);
   assert.equal(shouldResolveReportAfterCompletion('assigned', 0), false);
   assert.equal(shouldResolveReportAfterCompletion('resolved', 0), false);
+});
+
+test('work order PDFs embed report photos with report details', async (t) => {
+  const storageKey = 'test-work-order-photo.jpg';
+  const photoPath = path.resolve(env.uploadDir, storageKey);
+  t.after(async () => { await rm(photoPath, { force: true }); });
+  await mkdir(env.uploadDir, { recursive: true });
+  await writeFile(photoPath, Buffer.from(
+    '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/ASP/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/ASP/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAY/Al//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IV//2gAMAwEAAgADAAAAEP/EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8QH//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8QH//EABQQAQAAAAAAAAAAAAAAAAAAABD/2gAIAQEAAT8QH//Z',
+    'base64',
+  ));
+
+  const pdf = await renderDocument({
+    workOrderTitle: 'Repair broken bench',
+    workOrderDescription: 'Replace damaged boards',
+    status: 'draft',
+    responsibleEntity: { name: 'City Utility', type: 'utility_company' },
+    report: {
+      title: 'Broken bench',
+      categoryName: 'Urban furniture',
+      priority: 'high',
+      status: 'accepted',
+      address: 'Main square',
+      latitude: 46.1,
+      longitude: 19.66,
+      description: 'Bench is unsafe to use.',
+      photos: [{ storageKey, url: `/uploads/${storageKey}` }],
+    },
+  });
+
+  const pdfText = pdf.toString('latin1');
+  assert.match(pdfText, /\/Subtype \/Image/);
 });

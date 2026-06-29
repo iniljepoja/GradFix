@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validate.js';
-import { authenticate, requireCitizen } from '../middleware/auth.js';
+import { authenticate, requireCitizen, requireVerified } from '../middleware/auth.js';
 import { photoUpload } from '../middleware/upload.js';
 import * as reports from '../services/report.service.js';
 import * as photos from '../services/photo.service.js';
@@ -67,7 +67,7 @@ router.get('/:id/history', async (req, res, next) => {
 // priority. `photoUpload` parses the text fields and the `photos` files; the service enforces
 // email verification, the photo requirement, and automatic category→entity routing.
 const emptyToUndef = (v) => (v === '' ? undefined : v);
-router.post('/', authenticate, requireCitizen, photoUpload,
+router.post('/', authenticate, requireCitizen, requireVerified, photoUpload,
   validate({
     body: z.object({
       title: z.string().min(3),

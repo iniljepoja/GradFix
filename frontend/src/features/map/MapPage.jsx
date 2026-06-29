@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
+import { Link, useSearchParams } from 'react-router-dom';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import { api } from '../../api/client.js';
 import * as categoriesApi from '../../api/categories.js';
@@ -29,6 +29,16 @@ function markerIcon(status) {
     iconSize: [26, 26],
     iconAnchor: [13, 13],
     popupAnchor: [0, -10],
+  });
+}
+
+function centerIcon() {
+  return L.divIcon({
+    className: '',
+    html: '<span style="display:block;width:22px;height:22px;border-radius:999px;background:#6f4fc7;border:4px solid #fff;box-shadow:0 1px 6px rgba(33,27,51,.4);"></span>',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -12],
   });
 }
 
@@ -66,7 +76,15 @@ function ReportMarker({ feature }) {
 const bboxOf = (b) =>
   [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((n) => n.toFixed(6)).join(',');
 
+const numberParam = (params, key) => {
+  const value = params.get(key);
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
 export default function MapPage() {
+  const [searchParams] = useSearchParams();
   const [features, setFeatures] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -75,6 +93,13 @@ export default function MapPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [categories, setCategories] = useState([]);
   const debounce = useRef();
+  const lat = numberParam(searchParams, 'lat');
+  const lng = numberParam(searchParams, 'lng');
+  const zoom = numberParam(searchParams, 'zoom');
+  const tenantCenter = lat != null && lng != null ? [lat, lng] : null;
+  const initialCenter = tenantCenter || SUBOTICA;
+  const initialZoom = zoom ?? 13;
+  const centerLabel = searchParams.get('label') || 'Tenant map center';
 
   useEffect(() => {
     let active = true;
@@ -105,9 +130,11 @@ export default function MapPage() {
 
   return (
     <div style={{ position: 'relative', height: 'calc(100vh - 49px)' }}>
-      <MapContainer center={SUBOTICA} zoom={13} style={{ height: '100%' }}>
+      <MapContainer center={initialCenter} zoom={initialZoom} zoomControl={false} style={{ height: '100%' }}>
         <TileLayer attribution={TILE_ATTRIBUTION} url={TILE_URL} subdomains={TILE_SUBDOMAINS} />
         <BoundsWatcher onBounds={onBounds} />
+        <ZoomControl position="bottomleft" />
+        {tenantCenter && <Marker position={tenantCenter} icon={centerIcon()}><Popup><strong>{centerLabel}</strong><br />Configured map center</Popup></Marker>}
         {features.map((f) => <ReportMarker key={f.properties.id} feature={f} />)}
       </MapContainer>
       {isLoading && (

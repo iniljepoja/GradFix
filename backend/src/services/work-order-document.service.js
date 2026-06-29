@@ -36,6 +36,13 @@ export async function buildSnapshot(client, tenantId, workOrderId) {
   );
   if (!rows[0]) throw ApiError.notFound('Work order not found');
   const s = rows[0];
+  const { rows: photos } = await run.query(
+    `SELECT id, storage_key AS "storageKey", url
+     FROM report_photos
+     WHERE report_id = $1
+     ORDER BY is_primary DESC, created_at`,
+    [s.reportId],
+  );
   return {
     workOrderId: s.id,
     workOrderTitle: s.workOrderTitle,
@@ -53,6 +60,7 @@ export async function buildSnapshot(client, tenantId, workOrderId) {
       latitude: s.latitude, longitude: s.longitude,
       categoryName: s.categoryName, subcategoryName: s.subcategoryName,
       reporterName: s.reporterName ?? null,
+      photos,
     },
     generatedAt: new Date().toISOString(),
   };
@@ -64,6 +72,7 @@ function fmt(value) { return value == null ? '' : String(value); }
 // UTF-8 text document so the work-order flow still works end-to-end (immutable + checksummed).
 export async function renderDocument(snapshot) {
   if (PDFDocument) {
+    const photos = await loadSnapshotPhotos(snapshot.report.photos);
     return new Promise((resolve, reject) => {
       try {
         const buffers = [];
@@ -101,6 +110,15 @@ export async function renderDocument(snapshot) {
         if (snapshot.report.description) {
           doc.text('Description:').text(snapshot.report.description);
         }
+        if (photos.length) {
+          doc.moveDown(0.5);
+          doc.fontSize(14).text('Photos');
+          for (const [i, photo] of photos.entries()) {
+            doc.moveDown(0.25);
+            doc.fontSize(10).text(`Photo ${i + 1}`);
+            doc.image(photo.data, { fit: [240, 160], align: 'left' });
+          }
+        }
         doc.end();
       } catch (err) { reject(err); }
     });
@@ -128,8 +146,22 @@ export async function renderDocument(snapshot) {
       ? `  Location: ${snapshot.report.latitude}, ${snapshot.report.longitude}` : '',
     snapshot.report.reporterName ? `  Reporter: ${fmt(snapshot.report.reporterName)}` : '',
     snapshot.report.description ? `\nDescription:\n${snapshot.report.description}` : '',
+    snapshot.report.photos?.length ? `\nPhotos:\n${snapshot.report.photos.map((p, i) => `  ${i + 1}. ${p.url || p.storageKey}`).join('\n')}` : '',
   ].filter((l) => l !== '');
   return Buffer.from(lines.join('\n'), 'utf8');
+}
+
+async function loadSnapshotPhotos(photos = []) {
+  const loaded = [];
+  for (const photo of photos) {
+    if (!photo.storageKey) continue;
+    try {
+      loaded.push({ ...photo, data: await readDocumentFile(photo.storageKey) });
+    } catch {
+      // A missing upload should not block issuing the work order document.
+    }
+  }
+  return loaded;
 }
 
 async function nextVersion(client, tenantId, workOrderId) {

@@ -67,7 +67,10 @@ The citizen-facing PWA, built against the Week 2 API.
 - **Deliverable**: municipality staff triage and resolve reports end-to-end.
 
 ## Week 5 — Integration
-- Wire push notification delivery (VAPID/Web Push) on top of the stored subscriptions.
+- ~~Push notification delivery (VAPID/Web Push) on top of the stored subscriptions.~~ ✅ Done —
+  VAPID env config, `web-push` fan-out on status change with stale-subscription pruning,
+  `GET /notifications/vapid-public`, custom service worker with `push`/`notificationclick` handlers,
+  dashboard "Enable push notifications" toggle.
 - CSV/Excel export of reports/analytics; heat-map layer on the public map.
 - End-to-end + tenant-isolation tests, bug fixes, performance pass (image lazy-loading, FCP/TTI).
 

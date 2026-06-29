@@ -49,6 +49,19 @@ router.post('/verify-email',
     catch (err) { next(err); }
   });
 
+router.post('/verify-email/resend', authenticate, async (req, res, next) => {
+  try { await auth.resendVerification(req.user.id); res.json({ data: { ok: true } }); }
+  catch (err) { next(err); }
+});
+
+// Public resend for unverified users who can't log in yet.
+router.post('/verify-email/resend-public',
+  validate({ body: z.object({ email: z.string().email() }) }),
+  async (req, res, next) => {
+    try { await auth.resendVerificationByEmail(req.tenant.id, req.body.email); res.json({ data: { ok: true } }); }
+    catch (err) { next(err); }
+  });
+
 router.post('/forgot-password',
   validate({ body: z.object({ email: z.string().email() }) }),
   async (req, res, next) => {

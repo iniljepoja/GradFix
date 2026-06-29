@@ -11,7 +11,14 @@ export function createApp() {
   const app = express();
 
   app.use(helmet());
-  app.use(cors({ origin: env.corsOrigins, credentials: true }));
+  // In dev/preview the frontend origin port varies (5173 dev, 5174/4173 preview); accept any
+  // localhost origin there. Production sets CORS_ORIGINS explicitly and bypasses the local check.
+  const isLocalOrigin = (origin) => typeof origin === 'string' && /^http:\/\/localhost(:\d+)?$/.test(origin);
+  const corsOrigin = (origin, cb) => {
+    if (!origin || env.corsOrigins.includes(origin) || isLocalOrigin(origin)) return cb(null, true);
+    return cb(new Error(`Origin ${origin} not allowed by CORS`));
+  };
+  app.use(cors({ origin: corsOrigin, credentials: true }));
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true }));
 

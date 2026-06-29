@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { ApiError } from '../utils/ApiError.js';
+import { query } from '../config/db.js';
 
 // Verifies the Bearer access token and attaches req.user = { id, role, tenantId }.
 export function authenticate(req, res, next) {
@@ -12,6 +13,9 @@ export function authenticate(req, res, next) {
   try {
     const payload = jwt.verify(token, env.jwt.accessSecret);
     req.user = { id: payload.sub, role: payload.role, tenantId: payload.tenantId };
+    if (req.user.role !== 'super_admin' && req.tenant && !req.tenant.is_active) {
+      return next(ApiError.forbidden('Tenant is suspended'));
+    }
     if (req.user.role !== 'super_admin' && req.user.tenantId !== req.tenant?.id) {
       return next(ApiError.forbidden('User does not belong to this tenant'));
     }
@@ -37,10 +41,18 @@ export function requireCitizen(req, res, next) {
   next();
 }
 
-// Blocks unverified users from a route (e.g. creating reports).
-export function requireVerified(req, res, next) {
-  if (!req.user?.emailVerified && req.user?.role === 'citizen') {
-    // emailVerified is loaded by the user service when needed; default-deny here is conservative.
+// Blocks unverified citizens from a route (e.g. creating reports). Staff bypass this check.
+// The JWT doesn't carry emailVerified, so we load it from the DB on demand.
+export async function requireVerified(req, res, next) {
+  if (!req.user) return next(ApiError.unauthorized());
+  if (req.user.role !== 'citizen') return next();
+  try {
+    const { rows } = await query('SELECT is_email_verified FROM users WHERE id = $1', [req.user.id]);
+    if (!rows[0]?.is_email_verified) {
+      return next(ApiError.forbidden('EMAIL_NOT_VERIFIED', 'Email not verified. Please verify your email to file reports.'));
+    }
+    next();
+  } catch {
+    next(ApiError.unauthorized());
   }
-  next();
 }

@@ -91,6 +91,7 @@ textarea.input { min-height: 96px; resize: vertical; }
 .badge-none { background: var(--bg); color: var(--muted); }
 .progressbar { height: 8px; background: var(--bg); border-radius: 999px; overflow: hidden; }
 .progressbar > span { display: block; height: 100%; background: var(--brand); }
+.tenant-chip { display: inline-flex; align-items: center; justify-content: center; min-height: 41px; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px; background: #efeafb; color: var(--brand-dark); font-weight: 700; }
 
 /* Status pills */
 .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; text-transform: capitalize; }
@@ -178,6 +179,8 @@ textarea.input { min-height: 96px; resize: vertical; }
 .admin-table td { padding: 11px 10px; border-bottom: 1px solid var(--border); font-size: 0.92rem; }
 .admin-table tbody tr { cursor: pointer; }
 .admin-table tbody tr:hover { background: #faf8fe; }
+.admin-table.no-click tbody tr { cursor: default; }
+.admin-table.no-click tbody tr:hover { background: transparent; }
 .admin-table tbody tr:last-child td { border-bottom: none; }
 
 /* Modal */
@@ -200,6 +203,7 @@ textarea.input { min-height: 96px; resize: vertical; }
 /* Map */
 .map-wrap { flex: 1; min-height: 70vh; }
 .leaflet-container { height: 100%; width: 100%; }
+.leaflet-bottom.leaflet-left .leaflet-control-zoom { margin-bottom: 24px; }
 
 @media (max-width: 560px) {
   .nav-user { display: none; }

@@ -9,9 +9,22 @@ export const WORK_ORDER_STATUS_LABELS = {
 };
 
 const CANCELLABLE = new Set(['draft', 'sent', 'delivery_failed', 'in_progress']);
+const SENDABLE = new Set(['draft', 'delivery_failed']);
 
 export function canCancelWorkOrder(status) {
   return CANCELLABLE.has(status);
+}
+
+export function canSendWorkOrder(status) {
+  return SENDABLE.has(status);
+}
+
+export function canStartWorkOrder(status) {
+  return status === 'sent';
+}
+
+export function canCompleteWorkOrder(status) {
+  return status === 'in_progress';
 }
 
 export function promptCancelReason() {

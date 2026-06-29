@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { apiErrorMessage } from '../../lib/apiError.js';
+import { apiErrorMessage, apiErrorCode } from '../../lib/apiError.js';
 import { homeForRole, isStaff } from '../../lib/roles.js';
 import Field from '../../components/Field.jsx';
 
@@ -28,6 +28,10 @@ export default function LoginPage() {
         : from;
       navigate(target, { replace: true });
     } catch (err) {
+      if (apiErrorCode(err) === 'EMAIL_NOT_VERIFIED') {
+        navigate('/verify-email', { replace: true, state: { from, email } });
+        return;
+      }
       setError(apiErrorMessage(err, 'Invalid email or password.'));
     } finally { setBusy(false); }
   };

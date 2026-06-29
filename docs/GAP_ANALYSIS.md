@@ -24,7 +24,7 @@ These are coded and functional in the backend.
 | --- | --- | --- |
 | Multi-tenant architecture, data isolation per city | `middleware/tenant.js`, `tenant_id` on all scoped tables | Shared-DB + `tenant_id`; resolved via `X-Tenant`/subdomain |
 | Mandatory registration with valid email | `auth.service.register`, `auth.routes` | Email format validated (Zod) |
-| Email verification | `auth.service.verifyEmail`, hashed single-use tokens | Unverified users blocked from creating reports |
+| Email verification | `auth.service.verifyEmail`, hashed single-use tokens | Unverified citizens blocked from login and report creation |
 | Forgotten-password flow | `auth.service.requestPasswordReset` / `resetPassword` | Hashed, expiring, single-use tokens |
 | REST API + PostgreSQL | `backend/`, `db/migrations/001_init.sql` | Versioned `/api/v1`, parameterized SQL, no ORM |
 | Report creation (text, category, GPS coords, priority) | `report.service.create`, `reports.routes` | Accepts lat/lng + priority; category ownership checked |

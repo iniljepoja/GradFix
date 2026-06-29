@@ -7,6 +7,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
       manifest: {
         name: 'GradFix',
         short_name: 'GradFix',
@@ -18,16 +21,6 @@ export default defineConfig({
         icons: [
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
-        ],
-      },
-      workbox: {
-        // Cache basemap tiles (CARTO Voyager) for offline map viewing.
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/[a-d]\.basemaps\.cartocdn\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: { cacheName: 'basemap-tiles', expiration: { maxEntries: 500 } },
-          },
         ],
       },
     }),

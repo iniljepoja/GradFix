@@ -29,6 +29,16 @@ export async function verifyEmail(token) {
   return data.data;
 }
 
+export async function resendVerification() {
+  const { data } = await api.post('/auth/verify-email/resend');
+  return data.data;
+}
+
+export async function resendVerificationPublic(email) {
+  const { data } = await api.post('/auth/verify-email/resend-public', { email });
+  return data.data;
+}
+
 export async function forgotPassword(email) {
   await api.post('/auth/forgot-password', { email });
 }

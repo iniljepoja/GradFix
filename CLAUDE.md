@@ -64,7 +64,7 @@ Controllers throw `ApiError` (`utils/ApiError.js`); the error handler converts t
   `refresh_tokens`). `middleware/auth.js` verifies the access token and loads `req.user`.
 - Email verification and password reset use single-use, hashed, expiring tokens
   (`email_verification_tokens`, `password_reset_tokens`). Plain tokens are emailed; only hashes are
-  stored. Unverified users can log in but are blocked from creating reports.
+  stored. Unverified citizens cannot log in or create reports; staff and super_admin bypass this.
 
 ### Reports & status lifecycle
 - **Creation** (`POST /reports`) is `multipart/form-data` and **requires 1–3 photos** — enforced in

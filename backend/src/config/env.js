@@ -22,4 +22,9 @@ export const env = {
   },
   appBaseUrl: process.env.APP_BASE_URL || 'http://localhost:5173',
   uploadDir: process.env.UPLOAD_DIR || 'uploads',
+  vapid: {
+    publicKey: process.env.VAPID_PUBLIC_KEY || 'BJU9oILqWf_sXkaZAI3w4KvNVT4Jr4j3zs5BSDSfFwqtfsEcF0PtQefpqu4PCYz0h2nN_NawYWNvKh4mMpnE8iY',
+    privateKey: process.env.VAPID_PRIVATE_KEY || 'wpmdbO5X45QrRQhqBCEgTZTcFwxQiwV14GI7e2nkKVI',
+    subject: process.env.VAPID_SUBJECT || 'mailto:admin@gradfix.app',
+  },
 };

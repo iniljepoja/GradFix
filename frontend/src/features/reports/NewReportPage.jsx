@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -6,13 +6,13 @@ import * as reportsApi from '../../api/reports.js';
 import * as categoriesApi from '../../api/categories.js';
 import { apiErrorMessage } from '../../lib/apiError.js';
 import { compressImage } from '../../lib/imageCompression.js';
+import { reverseGeocode } from '../../lib/geo.js';
 import Field from '../../components/Field.jsx';
 import Spinner from '../../components/Spinner.jsx';
 import LocationPicker from '../map/LocationPicker.jsx';
 import NearbyReports from './NearbyReports.jsx';
 
 const MAX_PHOTOS = 3;
-const PRIORITIES = ['low', 'medium', 'high', 'critical'];
 const STEPS = ['Photos', 'Location', 'Category', 'Details', 'Review'];
 
 export default function NewReportPage() {
@@ -25,7 +25,7 @@ export default function NewReportPage() {
   const [photoBusy, setPhotoBusy] = useState(false);
   const [location, setLocation] = useState(null); // { lat, lng }
   const [form, setForm] = useState({
-    categoryId: '', subcategoryId: '', title: '', description: '', address: '', priority: 'medium',
+    categoryId: '', subcategoryId: '', title: '', description: '', address: '',
   });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -34,7 +34,33 @@ export default function NewReportPage() {
   const [supported, setSupported] = useState(new Map());
   const onSupport = (id, count) => setSupported((m) => new Map(m).set(id, count));
 
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  // Track whether the user has manually typed in the address field, so we don't
+  // overwrite their input when reverse-geocoding fires after a pin drop/drag.
+  const addressTouched = useRef(false);
+  const [addressIncomplete, setAddressIncomplete] = useState(false);
+  const [addressLookupFailed, setAddressLookupFailed] = useState(false);
+
+  // When the pin location changes, reverse-geocode it and prefill the address field
+  // — but only if the user hasn't manually edited it yet. If the lookup fails (rate limit,
+  // network), we show a message but never block the user — the pin coordinates are the
+  // source of truth and the address is optional.
+  useEffect(() => {
+    if (!location || addressTouched.current) return;
+    let active = true;
+    setAddressLookupFailed(false);
+    reverseGeocode(location).then((result) => {
+      if (!active) return;
+      if (!result) { setAddressLookupFailed(true); return; }
+      setForm((f) => ({ ...f, address: result.address }));
+      setAddressIncomplete(!result.hasHouseNumber);
+    });
+    return () => { active = false; };
+  }, [location]);
+
+  const set = (k) => (e) => {
+    if (k === 'address') { addressTouched.current = true; setAddressIncomplete(false); setAddressLookupFailed(false); }
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+  };
 
   // Revoke object URLs on unmount to avoid leaking memory.
   useEffect(() => () => photos.forEach((p) => URL.revokeObjectURL(p.url)), [photos]);
@@ -108,7 +134,6 @@ export default function NewReportPage() {
       fd.append('latitude', String(location.lat));
       fd.append('longitude', String(location.lng));
       if (form.address.trim()) fd.append('address', form.address.trim());
-      fd.append('priority', form.priority);
 
       await reportsApi.create(fd);
       await queryClient.invalidateQueries({ queryKey: ['my-reports'] });
@@ -144,7 +169,12 @@ export default function NewReportPage() {
           <div className="stack">
             <h2>Where is it?</h2>
             <LocationPicker value={location} onChange={setLocation} />
-            <Field label="Address or landmark (optional)" id="address"
+            <Field label="Address or landmark" id="address"
+              hint={addressLookupFailed
+                ? 'Could not look up the address automatically. The exact pin location is saved — type an address or landmark if you can.'
+                : addressIncomplete
+                  ? 'No house number found at this spot — the exact pin location is saved. Add a number or landmark if you can.'
+                  : 'Auto-filled from the pin location — edit if needed.'}
               placeholder="e.g. Ilica 5, near the tram stop"
               value={form.address} onChange={set('address')} />
             <NearbyReports location={location} onContinue={next}
@@ -203,13 +233,6 @@ export default function NewReportPage() {
               hint="Add any detail that helps the city locate and fix the problem.">
               <textarea id="description" className="input" rows={5}
                 value={form.description} onChange={set('description')} />
-            </Field>
-            <Field label="Priority" id="priority" as="custom">
-              <select id="priority" className="input" value={form.priority} onChange={set('priority')}>
-                {PRIORITIES.map((p) => (
-                  <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>
-                ))}
-              </select>
             </Field>
           </div>
         )}
@@ -278,7 +301,6 @@ function ReviewStep({ photos, location, category, subcategory, form }) {
         <ReviewRow label="Title" value={form.title} />
         <ReviewRow label="Category"
           value={[category?.name, subcategory?.name].filter(Boolean).join(' › ') || '—'} />
-        <ReviewRow label="Priority" value={form.priority[0].toUpperCase() + form.priority.slice(1)} />
         <ReviewRow label="Location"
           value={location ? `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}` : '—'} />
         {form.address.trim() && <ReviewRow label="Address" value={form.address.trim()} />}

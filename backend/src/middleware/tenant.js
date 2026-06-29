@@ -22,7 +22,8 @@ export async function resolveTenant(req, res, next) {
       [slug],
     );
     const tenant = rows[0];
-    if (!tenant || !tenant.is_active) {
+    const allowInactiveTenant = req.path.startsWith('/admin/platform') || req.path.startsWith('/auth');
+    if (!tenant || (!tenant.is_active && !allowInactiveTenant)) {
       throw new ApiError(404, 'TENANT_NOT_FOUND', `Unknown tenant: ${slug}`);
     }
 

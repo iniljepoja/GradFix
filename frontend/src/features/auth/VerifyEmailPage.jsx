@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import * as authApi from '../../api/auth.js';
 import { apiErrorMessage } from '../../lib/apiError.js';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -10,10 +10,13 @@ export default function VerifyEmailPage() {
   const token = params.get('token') || '';
   const { user, refreshProfile } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const ran = useRef(false);
+  const userEmail = user?.email || location.state?.email || '';
 
   const [status, setStatus] = useState(token ? 'verifying' : 'notice');
   const [error, setError] = useState('');
+  const [resendState, setResendState] = useState('idle'); // idle | sending | sent | error
 
   // Consume the token from the email link (guard against React StrictMode double-run).
   useEffect(() => {
@@ -38,6 +41,23 @@ export default function VerifyEmailPage() {
     } catch { /* ignore */ }
   };
 
+  const resend = async () => {
+    setResendState('sending');
+    try {
+      if (user) {
+        await authApi.resendVerification();
+      } else if (userEmail) {
+        await authApi.resendVerificationPublic(userEmail);
+      } else {
+        throw new Error('No email address to resend to.');
+      }
+      setResendState('sent');
+    } catch (err) {
+      setResendState('error');
+      setError(apiErrorMessage(err, 'Could not resend verification email.'));
+    }
+  };
+
   return (
     <div className="auth-page">
       <div className="card stack center">
@@ -57,6 +77,11 @@ export default function VerifyEmailPage() {
         {status === 'error' && (
           <>
             <div className="alert alert-error">{error}</div>
+            {user && (
+              <button className="btn btn-primary" onClick={resend} disabled={resendState === 'sending' || resendState === 'sent'}>
+                {resendState === 'sent' ? 'Verification email sent — check your inbox' : resendState === 'sending' ? 'Sending…' : 'Resend verification email'}
+              </button>
+            )}
             <Link className="btn" to="/login">Back to login</Link>
           </>
         )}
@@ -64,11 +89,20 @@ export default function VerifyEmailPage() {
         {status === 'notice' && (
           <>
             <div className="alert alert-info">
-              Please verify your email{user ? <> (<strong>{user.email}</strong>)</> : null} using the
+              Please verify your email{userEmail ? <> (<strong>{userEmail}</strong>)</> : null} using the
               link we sent you. You can browse the map, but reporting requires a verified account.
             </div>
-            {user && <button className="btn btn-primary" onClick={recheck}>I have verified — continue</button>}
-            {!user && <Link className="btn" to="/login">Back to login</Link>}
+            {(user || userEmail) && (
+              <>
+                <button className="btn btn-sm" onClick={resend} disabled={resendState === 'sending' || resendState === 'sent'}>
+                  {resendState === 'sent' ? 'Verification email sent — check your inbox' : resendState === 'sending' ? 'Sending…' : 'Resend verification email'}
+                </button>
+                {resendState === 'error' && <span className="report-meta">{error}</span>}
+                {user && <button className="btn btn-sm btn-primary" onClick={recheck}>I have verified — continue</button>}
+                {!user && <Link className="btn btn-sm" to="/login">Back to login</Link>}
+              </>
+            )}
+            {!user && !userEmail && <Link className="btn btn-sm" to="/login">Back to login</Link>}
           </>
         )}
       </div>

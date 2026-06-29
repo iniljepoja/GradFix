@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import Layout from './components/Layout.jsx';
 import CitizenRoute from './components/CitizenRoute.jsx';
 import MapPage from './features/map/MapPage.jsx';
@@ -18,11 +19,19 @@ import ReportsQueuePage from './features/admin/ReportsQueuePage.jsx';
 import AdminReportDetailPage from './features/admin/AdminReportDetailPage.jsx';
 import WorkOrdersPage from './features/admin/WorkOrdersPage.jsx';
 import PlatformAdminPage from './features/admin/PlatformAdminPage.jsx';
+import PlatformTenantsPage from './features/admin/PlatformTenantsPage.jsx';
+import PlatformTenantDetailPage from './features/admin/PlatformTenantDetailPage.jsx';
+import PlatformTenantAdminsPage from './features/admin/PlatformTenantAdminsPage.jsx';
+import PlatformEntitiesPage from './features/admin/PlatformEntitiesPage.jsx';
+import PlatformReportsPage from './features/admin/PlatformReportsPage.jsx';
+import PlatformWorkOrdersPage from './features/admin/PlatformWorkOrdersPage.jsx';
 import ResponsibleEntitiesPage from './features/admin/ResponsibleEntitiesPage.jsx';
+import { useAuth } from './context/AuthContext.jsx';
 
 export default function App() {
   return (
     <Layout>
+      <ServiceWorkerMessenger />
       <Routes>
         {/* Public */}
         <Route path="/" element={<MapPage />} />
@@ -41,16 +50,54 @@ export default function App() {
 
         {/* Admin panel (staff only) */}
         <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
-          <Route index element={<AdminDashboardPage />} />
-          <Route path="reports" element={<ReportsQueuePage />} />
-          <Route path="reports/:id" element={<AdminReportDetailPage />} />
-          <Route path="work-orders" element={<WorkOrdersPage />} />
-          <Route path="entities" element={<ResponsibleEntitiesPage />} />
-          <Route path="platform" element={<PlatformAdminPage />} />
+          <Route index element={<AdminHome />} />
+          <Route path="reports" element={<TenantAdminOnly><ReportsQueuePage /></TenantAdminOnly>} />
+          <Route path="reports/:id" element={<TenantAdminOnly><AdminReportDetailPage /></TenantAdminOnly>} />
+          <Route path="work-orders" element={<TenantAdminOnly><WorkOrdersPage /></TenantAdminOnly>} />
+          <Route path="entities" element={<TenantAdminOnly><ResponsibleEntitiesPage /></TenantAdminOnly>} />
+          <Route path="platform" element={<SuperAdminOnly><PlatformAdminPage /></SuperAdminOnly>} />
+          <Route path="platform/tenants" element={<SuperAdminOnly><PlatformTenantsPage /></SuperAdminOnly>} />
+          <Route path="platform/tenants/:id" element={<SuperAdminOnly><PlatformTenantDetailPage /></SuperAdminOnly>} />
+          <Route path="platform/admins" element={<SuperAdminOnly><PlatformTenantAdminsPage /></SuperAdminOnly>} />
+          <Route path="platform/entities" element={<SuperAdminOnly><PlatformEntitiesPage /></SuperAdminOnly>} />
+          <Route path="platform/reports" element={<SuperAdminOnly><PlatformReportsPage /></SuperAdminOnly>} />
+          <Route path="platform/work-orders" element={<SuperAdminOnly><PlatformWorkOrdersPage /></SuperAdminOnly>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
   );
+}
+
+function AdminHome() {
+  const { user } = useAuth();
+  if (user?.role === 'super_admin') return <Navigate to="/admin/platform" replace />;
+  return <AdminDashboardPage />;
+}
+
+function TenantAdminOnly({ children }) {
+  const { user } = useAuth();
+  if (user?.role !== 'tenant_admin') return <Navigate to="/admin/platform" replace />;
+  return children;
+}
+
+function SuperAdminOnly({ children }) {
+  const { user } = useAuth();
+  if (user?.role !== 'super_admin') return <Navigate to="/admin" replace />;
+  return children;
+}
+
+// When a push notification is clicked, the service worker asks the open app to navigate.
+function ServiceWorkerMessenger() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (event) => {
+      if (event.data?.type === 'navigate') navigate(event.data.url);
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, [navigate]);
+  return null;
 }

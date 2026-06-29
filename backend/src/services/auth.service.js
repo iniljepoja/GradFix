@@ -13,6 +13,7 @@ const VERIFY_TTL_HOURS = 24;
 const RESET_TTL_HOURS = 1;
 
 export async function register(tenant, { email, password, fullName }) {
+  if (!tenant.is_active) throw ApiError.forbidden('Tenant is suspended');
   const passwordHash = await bcrypt.hash(password, 12);
   const { rows } = await query(
     `INSERT INTO users (tenant_id, email, password_hash, full_name)
@@ -56,12 +57,36 @@ export async function verifyEmail(token) {
   });
 }
 
-export async function login(tenant, { email, password }) {
-  let { rows } = await query(
-    `SELECT id, email, password_hash, full_name, role, is_email_verified, tenant_id
-     FROM users WHERE tenant_id = $1 AND email = $2`,
-    [tenant.id, email.toLowerCase()],
+export async function resendVerification(userId) {
+  const { rows } = await query('SELECT email, is_email_verified FROM users WHERE id = $1', [userId]);
+  const user = rows[0];
+  if (!user) throw ApiError.notFound('User not found');
+  if (user.is_email_verified) throw ApiError.badRequest('Email is already verified');
+  await issueVerificationEmail(userId, user.email);
+}
+
+// Public resend: looks up the user by email + tenant (no auth required, since unverified users
+// can't log in to call the authenticated resend). Rate-limited by the route layer.
+export async function resendVerificationByEmail(tenantId, email) {
+  const { rows } = await query(
+    'SELECT id, is_email_verified FROM users WHERE tenant_id = $1 AND email = $2',
+    [tenantId, email.toLowerCase()],
   );
+  const user = rows[0];
+  if (!user) return; // do not reveal whether the email exists
+  if (user.is_email_verified) throw ApiError.badRequest('Email is already verified');
+  await issueVerificationEmail(user.id, email.toLowerCase());
+}
+
+export async function login(tenant, { email, password }) {
+  let rows = [];
+  if (tenant.is_active) {
+    ({ rows } = await query(
+      `SELECT id, email, password_hash, full_name, role, is_email_verified, tenant_id
+       FROM users WHERE tenant_id = $1 AND email = $2`,
+      [tenant.id, email.toLowerCase()],
+    ));
+  }
   if (!rows[0]) {
     ({ rows } = await query(
       `SELECT id, email, password_hash, full_name, role, is_email_verified, tenant_id
@@ -72,6 +97,9 @@ export async function login(tenant, { email, password }) {
   const user = rows[0];
   if (!user || !(await bcrypt.compare(password, user.password_hash))) {
     throw ApiError.unauthorized('Invalid credentials');
+  }
+  if (!user.is_email_verified && user.role === 'citizen') {
+    throw new ApiError(403, 'EMAIL_NOT_VERIFIED', 'Please verify your email before logging in.');
   }
   const accessToken = signAccessToken(user);
   const refreshToken = await issueRefreshToken(user.id);
@@ -97,13 +125,15 @@ async function issueRefreshToken(userId) {
 export async function refresh(rawToken) {
   const hash = hashToken(rawToken);
   const { rows } = await query(
-    `SELECT rt.id, rt.user_id, u.role, u.tenant_id
-     FROM refresh_tokens rt JOIN users u ON u.id = rt.user_id
-     WHERE rt.token_hash = $1 AND rt.revoked_at IS NULL AND rt.expires_at > now()`,
+    `SELECT rt.id, rt.user_id, u.role, u.tenant_id, t.is_active AS tenant_active
+      FROM refresh_tokens rt JOIN users u ON u.id = rt.user_id
+      LEFT JOIN tenants t ON t.id = u.tenant_id
+      WHERE rt.token_hash = $1 AND rt.revoked_at IS NULL AND rt.expires_at > now()`,
     [hash],
   );
   const row = rows[0];
   if (!row) throw ApiError.unauthorized('Invalid refresh token');
+  if (row.role !== 'super_admin' && !row.tenant_active) throw ApiError.forbidden('Tenant is suspended');
   // Rotate: revoke the old token, issue a new one.
   const newToken = await withTransaction(async (c) => {
     await c.query('UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1', [row.id]);
@@ -124,6 +154,7 @@ export async function logout(rawToken) {
 }
 
 export async function requestPasswordReset(tenant, email) {
+  if (!tenant.is_active) return;
   const { rows } = await query('SELECT id FROM users WHERE tenant_id = $1 AND email = $2',
     [tenant.id, email.toLowerCase()]);
   const user = rows[0];

@@ -9,30 +9,26 @@ import * as workOrders from '../services/work-order.service.js';
 import * as platform from '../services/platform.service.js';
 import { changeStatus } from '../services/report.service.js';
 import { adminStats } from '../services/stats.service.js';
+import { ApiError } from '../utils/ApiError.js';
 
 export const router = Router();
 
-// All /admin routes require an authenticated staff member; super_admin always passes.
-const STAFF = ['reviewer', 'conductor', 'community_manager', 'tenant_admin'];
-router.use(authenticate, authorize(...STAFF));
-const tenantAdmin = authorize('tenant_admin'); // tenant configuration; super_admin still passes
-
-// Per-action role separation (super_admin passes everything via authorize):
-//   reviewer          → triage: change status, set priority, merge duplicates
-//   conductor         → operations: change status, assign to a responsible entity
-//   community_manager → citizen communication: comments only (read + comment)
-//   tenant_admin      → all of the above + tenant configuration & user management
-const canReview = authorize('reviewer', 'tenant_admin');                  // priority, merge
-const canChangeStatus = authorize('reviewer', 'conductor', 'tenant_admin');
-const canAssign = authorize('conductor', 'tenant_admin');
-const canManageWorkOrders = authorize('conductor', 'tenant_admin');
+router.use(authenticate);
+const tenantAdmin = (req, _res, next) => {
+  if (req.user?.role !== 'tenant_admin') return next(ApiError.forbidden('Tenant Admin account required'));
+  next();
+};
+const canReview = tenantAdmin;
+const canChangeStatus = tenantAdmin;
+const canAssign = tenantAdmin;
+const canManageWorkOrders = tenantAdmin;
 const superAdmin = authorize('super_admin');
 
 const STATUS = z.enum(['accepted', 'assigned', 'in_progress', 'resolved', 'closed']);
 const WORK_ORDER_STATUS = z.enum(workOrders.WORK_ORDER_STATUSES);
 const PRIORITY = z.enum(['low', 'medium', 'high', 'critical']);
 const ENTITY_TYPE = z.enum(entities.ENTITY_TYPES);
-const ASSIGNABLE_ROLE = z.enum(['citizen', 'reviewer', 'conductor', 'community_manager', 'tenant_admin']);
+const ASSIGNABLE_ROLE = z.enum(['citizen', 'tenant_admin']);
 const UUID = z.string().uuid();
 
 const wrap = (fn) => async (req, res, next) => { try { await fn(req, res); } catch (err) { next(err); } };
@@ -50,11 +46,15 @@ router.post('/platform/tenants', superAdmin,
   wrap(async (req, res) => { res.status(201).json({ data: await platform.createTenant(req.body) }); }));
 
 router.patch('/platform/tenants/:id', superAdmin,
-  validate({ body: z.object({
+  validate({ params: z.object({ id: UUID }), body: z.object({
     name: z.string().min(1).optional(), centerLat: z.number().nullable().optional(),
     centerLng: z.number().nullable().optional(), isActive: z.boolean().optional(),
   }) }),
   wrap(async (req, res) => { res.json({ data: await platform.updateTenant(req.params.id, req.body) }); }));
+
+router.get('/platform/tenants/:id/stats', superAdmin,
+  validate({ params: z.object({ id: UUID }) }),
+  wrap(async (req, res) => { res.json({ data: await platform.tenantStats(req.params.id) }); }));
 
 router.get('/platform/reports', superAdmin,
   validate({ query: z.object({ tenantId: UUID.optional(), page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(100).default(50) }) }),
@@ -74,6 +74,16 @@ router.get('/platform/entities', superAdmin,
   validate({ query: z.object({ tenantId: UUID.optional() }) }),
   wrap(async (req, res) => { res.json({ data: await platform.listEntities(req.query) }); }));
 
+router.post('/platform/entities', superAdmin,
+  validate({ body: z.object({
+    tenantId: UUID, name: z.string().min(1), type: ENTITY_TYPE.default('municipal_department'),
+    email: z.string().email().optional(), phone: z.string().max(60).optional(), notes: z.string().max(2000).optional(),
+  }) }),
+  wrap(async (req, res) => {
+    const { tenantId, ...body } = req.body;
+    res.status(201).json({ data: await entities.createEntity(tenantId, body) });
+  }));
+
 router.get('/platform/tenant-admins', superAdmin,
   validate({ query: z.object({ tenantId: UUID.optional() }) }),
   wrap(async (req, res) => { res.json({ data: await platform.listTenantAdmins(req.query.tenantId) }); }));
@@ -81,6 +91,9 @@ router.get('/platform/tenant-admins', superAdmin,
 router.post('/platform/tenant-admins', superAdmin,
   validate({ body: z.object({ tenantId: UUID, email: z.string().email(), password: z.string().min(8), fullName: z.string().min(1) }) }),
   wrap(async (req, res) => { res.status(201).json({ data: await platform.createTenantAdmin(req.body) }); }));
+
+// Everything below this point is city operations/configuration and belongs to Tenant Admin only.
+router.use(tenantAdmin);
 
 // ── Dashboard statistics ────────────────────────────────────────────────────
 router.get('/stats', wrap(async (req, res) => {

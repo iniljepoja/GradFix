@@ -9,12 +9,7 @@ export const DEMO = {
   admin: { email: 'admin@gradfix.app', password: 'Admin123!', fullName: 'Demo Admin' },
   superAdmin: { email: 'super@gradfix.app', password: 'Super123!', fullName: 'Demo Main Admin' },
   citizen: { email: 'citizen@gradfix.app', password: 'Citizen123!', fullName: 'Demo Citizen' },
-  // One demo user per staff role, so role permission separation can be exercised end-to-end.
-  staff: [
-    { email: 'reviewer@gradfix.app', password: 'Reviewer123!', fullName: 'Demo Reviewer', role: 'reviewer' },
-    { email: 'conductor@gradfix.app', password: 'Conductor123!', fullName: 'Demo Conductor', role: 'conductor' },
-    { email: 'community@gradfix.app', password: 'Community123!', fullName: 'Demo Community Manager', role: 'community_manager' },
-  ],
+  staff: [],
   // Categories and subcategories per the internship specification.
   categories: [
     { name: 'Urban furniture', slug: 'urban-furniture', icon: 'bench',

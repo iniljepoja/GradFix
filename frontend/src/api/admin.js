@@ -63,6 +63,11 @@ export async function listReportWorkOrders(reportId) {
   return data.data;
 }
 
+export async function getWorkOrder(id) {
+  const { data } = await api.get(`/admin/work-orders/${id}`);
+  return data.data;
+}
+
 export async function createWorkOrder(reportId, body = {}) {
   const { data } = await api.post(`/admin/reports/${reportId}/work-orders`, body);
   return data.data;
@@ -71,6 +76,23 @@ export async function createWorkOrder(reportId, body = {}) {
 export async function changeWorkOrderStatus(id, body) {
   const { data } = await api.patch(`/admin/work-orders/${id}/status`, body);
   return data.data;
+}
+
+export async function sendWorkOrder(id, body = {}) {
+  const { data } = await api.post(`/admin/work-orders/${id}/send`, body);
+  return data.data;
+}
+
+export async function regenerateWorkOrderDocument(id) {
+  const { data } = await api.post(`/admin/work-orders/${id}/document`);
+  return data.data;
+}
+
+export async function downloadWorkOrderDocument(id) {
+  const res = await api.get(`/admin/work-orders/${id}/document`, { responseType: 'blob' });
+  const disposition = res.headers['content-disposition'] || '';
+  const fileName = disposition.match(/filename="?([^";]+)"?/)?.[1] || `work-order-${id}.pdf`;
+  return { blob: res.data, fileName };
 }
 
 export async function listEntities() {
@@ -108,6 +130,11 @@ export async function updatePlatformTenant(id, body) {
   return data.data;
 }
 
+export async function getPlatformTenantStats(id) {
+  const { data } = await api.get(`/admin/platform/tenants/${id}/stats`);
+  return data.data;
+}
+
 export async function listPlatformReports(params = {}) {
   const { data } = await api.get('/admin/platform/reports', { params });
   return { items: data.data, meta: data.meta };
@@ -120,6 +147,11 @@ export async function listPlatformWorkOrders(params = {}) {
 
 export async function listPlatformEntities(params = {}) {
   const { data } = await api.get('/admin/platform/entities', { params });
+  return data.data;
+}
+
+export async function createPlatformEntity(body) {
+  const { data } = await api.post('/admin/platform/entities', body);
   return data.data;
 }
 
